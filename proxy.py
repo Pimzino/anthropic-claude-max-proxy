@@ -17,6 +17,11 @@ from settings import (
 )
 from oauth import OAuthManager
 from storage import TokenStorage
+from openai_compat import (
+    convert_openai_request_to_anthropic,
+    convert_anthropic_response_to_openai,
+    convert_anthropic_stream_to_openai
+)
 
 # Setup logging
 logging.basicConfig(level=getattr(logging, LOG_LEVEL.upper()))
@@ -47,6 +52,37 @@ class AnthropicMessageRequest(BaseModel):
     stream: Optional[bool] = False
     thinking: Optional[ThinkingParameter] = None
     tools: Optional[List[Dict[str, Any]]] = None
+
+
+# OpenAI compatibility models
+class OpenAIFunction(BaseModel):
+    name: str
+    description: Optional[str] = None
+    parameters: Optional[Dict[str, Any]] = None
+
+
+class OpenAITool(BaseModel):
+    type: str = "function"
+    function: OpenAIFunction
+
+
+class OpenAIToolChoice(BaseModel):
+    type: str
+    function: Optional[Dict[str, str]] = None
+
+
+class OpenAIChatCompletionRequest(BaseModel):
+    model: str
+    messages: List[Dict[str, Any]]
+    max_tokens: Optional[int] = 4096
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    stop: Optional[Any] = None  # Can be string or list
+    stream: Optional[bool] = False
+    tools: Optional[List[Dict[str, Any]]] = None
+    tool_choice: Optional[Any] = None  # Can be string or dict
+    functions: Optional[List[Dict[str, Any]]] = None  # Legacy
+    function_call: Optional[Any] = None  # Legacy
 
 
 # Thinking variant parsing removed - clients send thinking parameters directly
@@ -320,6 +356,66 @@ async def health_check():
     return {"status": "ok", "timestamp": time.time()}
 
 
+@app.get("/v1/models")
+async def list_models():
+    """OpenAI-compatible models endpoint"""
+    models = [
+        {
+            "id": "claude-opus-4-1-20250805",
+            "object": "model",
+            "created": 1687882411,
+            "owned_by": "anthropic",
+            "context_length": 200000,
+            "max_completion_tokens": 8192
+        },
+        {
+            "id": "claude-opus-4-20250514",
+            "object": "model",
+            "created": 1687882411,
+            "owned_by": "anthropic",
+            "context_length": 200000,
+            "max_completion_tokens": 8192
+        },
+        {
+            "id": "claude-sonnet-4-20250514",
+            "object": "model",
+            "created": 1687882411,
+            "owned_by": "anthropic",
+            "context_length": 200000,
+            "max_completion_tokens": 8192
+        },
+        {
+            "id": "claude-3-7-sonnet-20250219",
+            "object": "model",
+            "created": 1687882411,
+            "owned_by": "anthropic",
+            "context_length": 200000,
+            "max_completion_tokens": 8192
+        },
+        {
+            "id": "claude-3-5-haiku-20241022",
+            "object": "model",
+            "created": 1687882411,
+            "owned_by": "anthropic",
+            "context_length": 200000,
+            "max_completion_tokens": 4096
+        },
+        {
+            "id": "claude-3-haiku-20240307",
+            "object": "model",
+            "created": 1687882411,
+            "owned_by": "anthropic",
+            "context_length": 200000,
+            "max_completion_tokens": 4096
+        }
+    ]
+
+    return {
+        "object": "list",
+        "data": models
+    }
+
+
 @app.get("/auth/status")
 async def auth_status():
     """Get token status without exposing secrets"""
@@ -420,6 +516,14 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
             # Return Anthropic response as-is (native format)
             anthropic_response = response.json()
             final_elapsed_ms = int((time.time() - start_time) * 1000)
+
+            # Log usage information for debugging
+            usage_info = anthropic_response.get("usage", {})
+            input_tokens = usage_info.get("input_tokens", 0)
+            output_tokens = usage_info.get("output_tokens", 0)
+            total_tokens = input_tokens + output_tokens
+            logger.debug(f"[{request_id}] [DEBUG] Response usage: input={input_tokens}, output={output_tokens}, total={total_tokens}")
+
             logger.info(f"[{request_id}] ===== ANTHROPIC MESSAGES FINISHED ===== Total time: {final_elapsed_ms}ms")
             return anthropic_response
 
@@ -431,6 +535,123 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
         final_elapsed_ms = int((time.time() - start_time) * 1000)
         logger.error(f"[{request_id}] Request failed after {final_elapsed_ms}ms: {e}")
         raise HTTPException(status_code=500, detail={"error": {"message": str(e)}})
+
+
+@app.post("/v1/chat/completions")
+async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_request: Request):
+    """OpenAI-compatible chat completions endpoint"""
+    request_id = str(uuid.uuid4())[:8]
+    start_time = time.time()
+
+    logger.info(f"[{request_id}] ===== NEW OPENAI CHAT COMPLETION REQUEST =====")
+    logger.debug(f"[{request_id}] OpenAI Request: {request.model_dump()}")
+
+    # Get valid access token with automatic refresh
+    access_token = await oauth_manager.get_valid_token_async()
+    if not access_token:
+        logger.error(f"[{request_id}] No valid token available")
+        raise HTTPException(
+            status_code=401,
+            detail={"error": {"message": "OAuth expired; please authenticate using the CLI"}}
+        )
+
+    try:
+        # Convert OpenAI request to Anthropic format
+        openai_request_dict = request.model_dump()
+        anthropic_request = convert_openai_request_to_anthropic(openai_request_dict)
+
+        logger.debug(f"[{request_id}] Converted to Anthropic format: {json.dumps(anthropic_request, indent=2)}")
+
+        # Sanitize request for Anthropic API constraints
+        anthropic_request = sanitize_anthropic_request(anthropic_request)
+
+        # Inject Claude Code system message to bypass authentication detection
+        anthropic_request = inject_claude_code_system_message(anthropic_request)
+
+        # Extract client beta headers
+        headers_dict = dict(raw_request.headers)
+        client_beta_headers = headers_dict.get("anthropic-beta")
+
+        if request.stream:
+            # Handle streaming response
+            logger.debug(f"[{request_id}] Initiating streaming request (OpenAI format)")
+
+            async def stream_with_conversion():
+                """Wrapper to convert Anthropic stream to OpenAI format"""
+                anthropic_stream = stream_anthropic_response(request_id, anthropic_request, access_token, client_beta_headers)
+                async for chunk in convert_anthropic_stream_to_openai(anthropic_stream, request.model, request_id):
+                    yield chunk
+
+            return StreamingResponse(
+                stream_with_conversion(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+            )
+        else:
+            # Handle non-streaming response
+            logger.debug(f"[{request_id}] Making non-streaming request (OpenAI format)")
+            response = await make_anthropic_request(anthropic_request, access_token, client_beta_headers)
+
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            logger.info(f"[{request_id}] Anthropic request completed in {elapsed_ms}ms status={response.status_code}")
+
+            if response.status_code != 200:
+                # Return error in OpenAI format
+                try:
+                    error_json = response.json()
+                    # Convert to OpenAI error format
+                    openai_error = {
+                        "error": {
+                            "message": error_json.get("error", {}).get("message", "Unknown error"),
+                            "type": error_json.get("error", {}).get("type", "api_error"),
+                            "code": response.status_code
+                        }
+                    }
+                except:
+                    openai_error = {
+                        "error": {
+                            "message": response.text,
+                            "type": "api_error",
+                            "code": response.status_code
+                        }
+                    }
+
+                logger.error(f"[{request_id}] Anthropic API error {response.status_code}: {json.dumps(openai_error)}")
+                raise HTTPException(status_code=response.status_code, detail=openai_error)
+
+            # Convert Anthropic response to OpenAI format
+            anthropic_response = response.json()
+            openai_response = convert_anthropic_response_to_openai(anthropic_response, request.model)
+
+            final_elapsed_ms = int((time.time() - start_time) * 1000)
+
+            # Log usage information for debugging
+            usage_info = openai_response.get("usage", {})
+            prompt_tokens = usage_info.get("prompt_tokens", 0)
+            completion_tokens = usage_info.get("completion_tokens", 0)
+            total_tokens = usage_info.get("total_tokens", 0)
+            logger.debug(f"[{request_id}] [DEBUG] Response usage: prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens}")
+
+            logger.info(f"[{request_id}] ===== OPENAI CHAT COMPLETION FINISHED ===== Total time: {final_elapsed_ms}ms")
+            return openai_response
+
+    except HTTPException:
+        final_elapsed_ms = int((time.time() - start_time) * 1000)
+        logger.error(f"[{request_id}] ===== OPENAI CHAT COMPLETION FAILED ===== Total time: {final_elapsed_ms}ms")
+        raise
+    except Exception as e:
+        final_elapsed_ms = int((time.time() - start_time) * 1000)
+        logger.error(f"[{request_id}] Request failed after {final_elapsed_ms}ms: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": {
+                    "message": str(e),
+                    "type": "internal_error",
+                    "code": 500
+                }
+            }
+        )
 
 
 class ProxyServer:
@@ -492,6 +713,7 @@ class ProxyServer:
     def run(self):
         """Run the proxy server (blocking)"""
         logger.info(f"Starting Anthropic Claude Max Proxy on http://{self.bind_address}:{PORT}")
+        logger.info(f"Available endpoints: /v1/messages (Anthropic), /v1/chat/completions (OpenAI)")
         self.config = uvicorn.Config(
             app,
             host=self.bind_address,
@@ -512,6 +734,7 @@ if __name__ == "__main__":
     # If run directly, just start the server (for backward compatibility)
     logger.info(f"Starting Anthropic Claude Max Proxy on http://{BIND_ADDRESS}:{PORT}")
     logger.info("Note: Use 'python cli.py' for the interactive CLI interface")
+    logger.info(f"Available endpoints: /v1/messages (Anthropic), /v1/chat/completions (OpenAI)")
 
     uvicorn.run(
         app,

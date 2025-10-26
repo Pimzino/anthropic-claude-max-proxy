@@ -283,9 +283,13 @@ class AnthropicProxyCLI:
             time.sleep(1)
 
             console.print(f"[green][OK][/green] Proxy running at http://{self.bind_address}:8081")
-            console.print(f"\nBase URL: http://{self.bind_address}:8081")
-            console.print("API Key: any-placeholder-string")
-            console.print("Endpoint: /v1/messages")
+            console.print(f"\n[bold cyan]Native Anthropic API:[/bold cyan]")
+            console.print(f"  Base URL: http://{self.bind_address}:8081")
+            console.print(f"  Endpoint: /v1/messages")
+            console.print(f"\n[bold cyan]OpenAI-Compatible API:[/bold cyan]")
+            console.print(f"  Base URL: http://{self.bind_address}:8081/v1")
+            console.print(f"  Endpoint: /v1/chat/completions")
+            console.print(f"\n[dim]API Key: any-placeholder-string[/dim]")
 
             if self.debug and hasattr(__main__, '_proxy_debug_logger'):
                 __main__._proxy_debug_logger.debug(f"[CLI] Proxy server started successfully at {self.bind_address}:8081")
