@@ -13,6 +13,14 @@
     "_note": "oauth-2025-04-20 NOT included - gates features not available to all Max users",
     "request_timeout": 600
   },
+  "debug": {
+    "stream_trace": {
+      "enabled": false,
+      "dir": "stream_traces",
+      "max_bytes": 262144,
+      "_note": "Enable to capture raw Anthropic/OpenAI stream chunks for debugging. Files may include sensitive content."
+    }
+  },
   "storage": {
     "token_file": "~/.anthropic-claude-max-proxy/tokens.json"
   }

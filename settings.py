@@ -23,6 +23,11 @@ ANTHROPIC_BETA = "oauth-2025-04-20"  # Base beta header (others added conditiona
 API_BASE = "https://api.anthropic.com"
 REQUEST_TIMEOUT = config.get("REQUEST_TIMEOUT", "api.request_timeout", 120.0)
 
+# Stream tracing / debugging
+STREAM_TRACE_ENABLED = config.get("STREAM_TRACE_ENABLED", "debug.stream_trace.enabled", False)
+STREAM_TRACE_DIR = config.get("STREAM_TRACE_DIR", "debug.stream_trace.dir", "stream_traces")
+STREAM_TRACE_MAX_BYTES = config.get("STREAM_TRACE_MAX_BYTES", "debug.stream_trace.max_bytes", 262144)
+
 # OAuth configuration (hardcoded - not user configurable)
 # Max/Pro OAuth: claude.ai for authorization, console.anthropic.com for token exchange
 # Uses Bearer tokens (not API keys) for authentication

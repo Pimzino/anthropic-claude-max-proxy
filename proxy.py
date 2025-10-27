@@ -13,8 +13,17 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from settings import (
-    PORT, LOG_LEVEL, THINKING_FORCE_ENABLED, THINKING_DEFAULT_BUDGET, BIND_ADDRESS, REQUEST_TIMEOUT
+    PORT,
+    LOG_LEVEL,
+    THINKING_FORCE_ENABLED,
+    THINKING_DEFAULT_BUDGET,
+    BIND_ADDRESS,
+    REQUEST_TIMEOUT,
+    STREAM_TRACE_ENABLED,
+    STREAM_TRACE_DIR,
+    STREAM_TRACE_MAX_BYTES,
 )
+from stream_debug import StreamTracer, maybe_create_stream_tracer
 from oauth import OAuthManager
 from storage import TokenStorage
 from openai_compat import (
@@ -326,7 +335,13 @@ async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token
         return response
 
 
-async def stream_anthropic_response(request_id: str, anthropic_request: Dict[str, Any], access_token: str, client_beta_headers: Optional[str] = None) -> AsyncIterator[str]:
+async def stream_anthropic_response(
+    request_id: str,
+    anthropic_request: Dict[str, Any],
+    access_token: str,
+    client_beta_headers: Optional[str] = None,
+    tracer: Optional[StreamTracer] = None,
+) -> AsyncIterator[str]:
     """Stream response from Anthropic API"""
     # Core required beta header for OAuth authentication
     required_betas = ["oauth-2025-04-20"]
@@ -349,6 +364,13 @@ async def stream_anthropic_response(request_id: str, anthropic_request: Dict[str
 
     beta_header_value = ",".join(required_betas)
     logger.debug(f"[{request_id}] Final beta headers: {beta_header_value}")
+
+    if tracer:
+        tracer.log_note(
+            f"starting Anthropic stream: model={anthropic_request.get('model')} "
+            f"use_1m={use_1m_context} thinking={anthropic_request.get('thinking')}"
+        )
+        tracer.log_note(f"anthropic beta header={beta_header_value}")
 
     headers = {
         "host": "api.anthropic.com",
@@ -373,6 +395,9 @@ async def stream_anthropic_response(request_id: str, anthropic_request: Dict[str
         "sec-fetch-mode": "cors"
     }
 
+    if tracer:
+        tracer.log_note(f"dispatching POST {headers['host']}/v1/messages for streaming")
+
     async with httpx.AsyncClient(timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=30.0)) as client:
         async with client.stream(
             "POST",
@@ -380,27 +405,48 @@ async def stream_anthropic_response(request_id: str, anthropic_request: Dict[str
             json=anthropic_request,
             headers=headers
         ) as response:
+            if tracer:
+                tracer.log_note(f"anthropic responded with status={response.status_code}")
+
             if response.status_code != 200:
                 # For error responses, stream them back as SSE events
                 error_text = await response.aread()
                 error_json = error_text.decode()
                 logger.error(f"[{request_id}] Anthropic API error {response.status_code}: {error_json}")
+                if tracer:
+                    tracer.log_error(f"anthropic error status={response.status_code} body={error_json}")
 
                 # Format error as SSE event for proper client handling
                 error_event = f"event: error\ndata: {error_json}\n\n"
+                if tracer:
+                    tracer.log_note("yielding synthetic error SSE event (non-200 response)")
                 yield error_event
                 return
 
             # Stream successful response chunks
+            chunk_index = 0
             try:
                 async for chunk in response.aiter_text():
+                    chunk_index += 1
+                    if tracer:
+                        tracer.log_note(f"received anthropic chunk #{chunk_index}")
+                        tracer.log_source_chunk(chunk)
                     yield chunk
             except httpx.ReadTimeout:
                 error_event = f"event: error\ndata: {{\"error\": \"Stream timeout after {REQUEST_TIMEOUT}s\"}}\n\n"
+                if tracer:
+                    tracer.log_error(f"anthropic stream timeout after {REQUEST_TIMEOUT}s")
+                    tracer.log_note("yielding timeout SSE event")
                 yield error_event
             except httpx.RemoteProtocolError as e:
                 error_event = f"event: error\ndata: {{\"error\": \"Connection closed: {str(e)}\"}}\n\n"
+                if tracer:
+                    tracer.log_error(f"anthropic stream closed unexpectedly: {str(e)}")
+                    tracer.log_note("yielding remote protocol error SSE event")
                 yield error_event
+            finally:
+                if tracer:
+                    tracer.log_note("anthropic stream closed")
 
 
 # Middleware for request logging
@@ -565,8 +611,30 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
         if request.stream:
             # Handle streaming response
             logger.debug(f"[{request_id}] Initiating streaming request")
+            tracer = maybe_create_stream_tracer(
+                enabled=STREAM_TRACE_ENABLED,
+                request_id=request_id,
+                route="anthropic-messages",
+                base_dir=STREAM_TRACE_DIR,
+                max_bytes=STREAM_TRACE_MAX_BYTES,
+            )
+
+            async def raw_stream():
+                try:
+                    async for chunk in stream_anthropic_response(
+                        request_id,
+                        anthropic_request,
+                        access_token,
+                        client_beta_headers,
+                        tracer=tracer,
+                    ):
+                        yield chunk
+                finally:
+                    if tracer:
+                        tracer.close()
+
             return StreamingResponse(
-                stream_anthropic_response(request_id, anthropic_request, access_token, client_beta_headers),
+                raw_stream(),
                 media_type="text/event-stream",
                 headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
             )
@@ -662,11 +730,34 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
             # Handle streaming response
             logger.debug(f"[{request_id}] Initiating streaming request (OpenAI format)")
 
+            tracer = maybe_create_stream_tracer(
+                enabled=STREAM_TRACE_ENABLED,
+                request_id=request_id,
+                route="openai-chat",
+                base_dir=STREAM_TRACE_DIR,
+                max_bytes=STREAM_TRACE_MAX_BYTES,
+            )
+
             async def stream_with_conversion():
                 """Wrapper to convert Anthropic stream to OpenAI format"""
-                anthropic_stream = stream_anthropic_response(request_id, anthropic_request, access_token, client_beta_headers)
-                async for chunk in convert_anthropic_stream_to_openai(anthropic_stream, request.model, request_id):
-                    yield chunk
+                try:
+                    anthropic_stream = stream_anthropic_response(
+                        request_id,
+                        anthropic_request,
+                        access_token,
+                        client_beta_headers,
+                        tracer=tracer,
+                    )
+                    async for chunk in convert_anthropic_stream_to_openai(
+                        anthropic_stream,
+                        request.model,
+                        request_id,
+                        tracer=tracer,
+                    ):
+                        yield chunk
+                finally:
+                    if tracer:
+                        tracer.close()
 
             return StreamingResponse(
                 stream_with_conversion(),
@@ -800,6 +891,11 @@ class ProxyServer:
         """Run the proxy server (blocking)"""
         logger.info(f"Starting Anthropic Claude Max Proxy on http://{self.bind_address}:{PORT}")
         logger.info(f"Available endpoints: /v1/messages (Anthropic), /v1/chat/completions (OpenAI)")
+        if STREAM_TRACE_ENABLED:
+            logger.warning(
+                "Stream tracing is ENABLED - raw SSE chunks will be written inside '%s'",
+                STREAM_TRACE_DIR,
+            )
         self.config = uvicorn.Config(
             app,
             host=self.bind_address,

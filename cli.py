@@ -16,6 +16,8 @@ from rich.table import Table
 from rich.prompt import Prompt, Confirm
 from rich import print as rprint
 
+import settings
+import proxy
 from storage import TokenStorage
 from oauth import OAuthManager
 from auth_cli import CLIAuthFlow
@@ -30,7 +32,13 @@ class AnthropicProxyCLI:
 
     MAX_RETRIES = 3  # Maximum number of retry attempts for network errors
 
-    def __init__(self, debug: bool = False, debug_sse: bool = False, bind_address: str = None):
+    def __init__(
+        self,
+        debug: bool = False,
+        debug_sse: bool = False,
+        bind_address: str = None,
+        stream_trace_enabled: bool = False
+    ):
         self.storage = TokenStorage()
         self.oauth = OAuthManager()
         self.auth_flow = CLIAuthFlow()
@@ -44,6 +52,7 @@ class AnthropicProxyCLI:
         self.debug = debug
         self.debug_sse = debug_sse
         self.bind_address = bind_address or self.proxy_server.bind_address
+        self.stream_trace_enabled = stream_trace_enabled
 
         # Configure debug console if debug mode is enabled
         self._setup_debug_console()
@@ -53,6 +62,8 @@ class AnthropicProxyCLI:
             console.print("[yellow]Debug mode enabled - verbose logging will be written to proxy_debug.log[/yellow]")
         if debug_sse:
             console.print("[yellow]SSE debug mode enabled - detailed streaming events will be logged[/yellow]")
+        if stream_trace_enabled:
+            console.print("[yellow]Stream tracing enabled - raw SSE chunks will be logged to disk (may include sensitive data).[/yellow]")
 
         # Create a single event loop for the CLI session
         self.loop = asyncio.new_event_loop()
@@ -472,14 +483,33 @@ def main():
     parser.add_argument("--debug", "-d", action="store_true", help="Enable debug logging")
     parser.add_argument("--debug-sse", action="store_true", help="Enable detailed SSE event logging")
     parser.add_argument("--bind", "-b", default=None, help="Override bind address (default: from config)")
+    parser.add_argument(
+        "--stream-trace",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable raw stream tracing log capture (implies --stream-trace for --debug unless explicitly disabled)"
+    )
 
     args = parser.parse_args()
+
+    # Determine stream tracing preference (config default -> CLI overrides)
+    stream_trace_setting = settings.STREAM_TRACE_ENABLED
+    if args.stream_trace is None:
+        if args.debug or args.debug_sse:
+            stream_trace_setting = True
+    else:
+        stream_trace_setting = args.stream_trace
+
+    # Apply overrides to runtime modules
+    settings.STREAM_TRACE_ENABLED = stream_trace_setting
+    proxy.STREAM_TRACE_ENABLED = stream_trace_setting
 
     try:
         cli = AnthropicProxyCLI(
             debug=args.debug,
             debug_sse=args.debug_sse,
-            bind_address=args.bind
+            bind_address=args.bind,
+            stream_trace_enabled=stream_trace_setting
         )
         cli.run()
     except KeyboardInterrupt:

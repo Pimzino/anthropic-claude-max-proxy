@@ -5,10 +5,13 @@ Converts between OpenAI chat completion format and Anthropic messages format.
 import time
 import json
 import re
-from typing import Dict, Any, List, Optional, AsyncIterator, Tuple
+from typing import Dict, Any, List, Optional, AsyncIterator, Tuple, TYPE_CHECKING
 import logging
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from stream_debug import StreamTracer
 
 # Reasoning effort to thinking budget mapping
 # Maps OpenAI's reasoning_effort levels to Anthropic's thinking budget_tokens
@@ -501,7 +504,8 @@ def convert_anthropic_response_to_openai(anthropic_response: Dict[str, Any], mod
 async def convert_anthropic_stream_to_openai(
     anthropic_stream: AsyncIterator[str],
     model: str,
-    request_id: str
+    request_id: str,
+    tracer: Optional["StreamTracer"] = None,
 ) -> AsyncIterator[str]:
     """
     Convert Anthropic SSE stream to OpenAI chat completion stream format.
@@ -521,6 +525,19 @@ async def convert_anthropic_stream_to_openai(
     current_text = ""
     tool_calls = []
     tool_call_index = 0
+    converted_index = 0
+
+    if tracer:
+        tracer.log_note("starting OpenAI stream conversion")
+
+    def emit(payload: Dict[str, Any]) -> str:
+        nonlocal converted_index
+        converted_index += 1
+        chunk_str = f"data: {json.dumps(payload)}\n\n"
+        if tracer:
+            tracer.log_note(f"emitting OpenAI chunk #{converted_index}")
+            tracer.log_converted_chunk(chunk_str)
+        return chunk_str
 
     try:
         async for chunk in anthropic_stream:
@@ -562,7 +579,7 @@ async def convert_anthropic_stream_to_openai(
                         }
                     ]
                 }
-                yield f"data: {json.dumps(initial_chunk)}\n\n"
+                yield emit(initial_chunk)
 
             elif event_type == "content_block_start":
                 # Check if it's a tool use block
@@ -601,7 +618,7 @@ async def convert_anthropic_stream_to_openai(
                             }
                         ]
                     }
-                    yield f"data: {json.dumps(delta_chunk)}\n\n"
+                    yield emit(delta_chunk)
 
                 elif delta_type == "input_json_delta":
                     # Tool use arguments delta
@@ -631,7 +648,7 @@ async def convert_anthropic_stream_to_openai(
                                 }
                             ]
                         }
-                        yield f"data: {json.dumps(delta_chunk)}\n\n"
+                        yield emit(delta_chunk)
 
             elif event_type == "content_block_stop":
                 # Content block finished
@@ -659,10 +676,12 @@ async def convert_anthropic_stream_to_openai(
                             }
                         ]
                     }
-                    yield f"data: {json.dumps(final_chunk)}\n\n"
+                    yield emit(final_chunk)
 
             elif event_type == "message_stop":
                 # Stream complete
+                if tracer:
+                    tracer.log_note("received message_stop event")
                 break
 
             elif event_type == "error":
@@ -673,7 +692,9 @@ async def convert_anthropic_stream_to_openai(
                         "type": data.get("error", {}).get("type", "api_error")
                     }
                 }
-                yield f"data: {json.dumps(error_chunk)}\n\n"
+                if tracer:
+                    tracer.log_error(f"anthropic error event: {error_chunk}")
+                yield emit(error_chunk)
                 break
 
     except Exception as e:
@@ -684,7 +705,13 @@ async def convert_anthropic_stream_to_openai(
                 "type": "conversion_error"
             }
         }
-        yield f"data: {json.dumps(error_chunk)}\n\n"
+        if tracer:
+            tracer.log_error(f"conversion exception: {e}")
+        yield emit(error_chunk)
 
     # Send [DONE] marker
-    yield "data: [DONE]\n\n"
+    done_chunk = "data: [DONE]\n\n"
+    if tracer:
+        tracer.log_note("emitting [DONE] marker")
+        tracer.log_converted_chunk(done_chunk)
+    yield done_chunk
