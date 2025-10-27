@@ -205,32 +205,28 @@ def inject_claude_code_system_message(request_data: Dict[str, Any]) -> Dict[str,
     """Inject Claude Code system message to bypass authentication detection"""
     modified_request = request_data.copy()
 
-    # The exact spoof message from Claude Code - must be first
     claude_code_spoof = "You are Claude Code, Anthropic's official CLI for Claude."
+    spoof_block = {"type": "text", "text": claude_code_spoof}
 
-    # Use simple string format (array format requires long context beta)
-    if 'system' in modified_request and modified_request['system']:
-        existing_system = modified_request['system']
+    existing_system = modified_request.get("system")
 
-        # Convert array format to string by extracting text
-        if isinstance(existing_system, list):
-            # Extract text from all array elements and join
-            system_texts = []
-            for element in existing_system:
-                if isinstance(element, dict) and 'text' in element:
-                    system_texts.append(element['text'])
-                elif isinstance(element, str):
-                    system_texts.append(element)
-            existing_text = "\n\n".join(system_texts)
-            modified_request['system'] = f"{claude_code_spoof}\n\n{existing_text}"
-        else:
-            # Already a string, just prepend
-            modified_request['system'] = f"{claude_code_spoof}\n\n{existing_system}"
+    if isinstance(existing_system, list):
+        if existing_system and isinstance(existing_system[0], dict) and existing_system[0].get("text") == claude_code_spoof:
+            return modified_request
+        modified_request["system"] = [spoof_block] + existing_system
+    elif isinstance(existing_system, str):
+        if existing_system.startswith(claude_code_spoof):
+            return modified_request
+        modified_request["system"] = [spoof_block, {"type": "text", "text": existing_system}]
+    elif existing_system is None:
+        modified_request["system"] = [spoof_block]
+    elif isinstance(existing_system, dict) and existing_system.get("text") == claude_code_spoof:
+        modified_request["system"] = [existing_system]
     else:
-        # No existing system message - create simple string
-        modified_request['system'] = claude_code_spoof
+        # Unrecognized format, wrap it to ensure spoof is first
+        modified_request["system"] = [spoof_block, existing_system] if existing_system else [spoof_block]
 
-    logger.debug(f"Injected Claude Code system message (string format) for Anthropic authentication bypass")
+    logger.debug("Injected Claude Code system message for Anthropic authentication bypass")
     return modified_request
 
 
