@@ -622,8 +622,6 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
         openai_request_dict = request.model_dump()
         anthropic_request = convert_openai_request_to_anthropic(openai_request_dict)
 
-        logger.debug(f"[{request_id}] Converted to Anthropic format: {json.dumps(anthropic_request, indent=2)}")
-
         # Sanitize request for Anthropic API constraints
         anthropic_request = sanitize_anthropic_request(anthropic_request)
 
@@ -632,6 +630,8 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
 
         # Strip cache_control from message content blocks (requires long context beta)
         anthropic_request = strip_cache_control_from_messages(anthropic_request)
+
+        logger.debug(f"[{request_id}] Final Anthropic request (after stripping): {json.dumps(anthropic_request, indent=2)}")
 
         # Extract client beta headers
         headers_dict = dict(raw_request.headers)
