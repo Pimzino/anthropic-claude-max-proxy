@@ -29,6 +29,9 @@ class _ThinkingCache:
             return
         if "thinking" not in thinking_block or "signature" not in thinking_block:
             return
+        sig = thinking_block.get("signature")
+        if not isinstance(sig, str) or not sig.strip():
+            return
 
         now = time.time()
         self._data[tool_use_id] = (thinking_block, now)
@@ -62,4 +65,3 @@ class _ThinkingCache:
 
 
 THINKING_CACHE = _ThinkingCache()
-

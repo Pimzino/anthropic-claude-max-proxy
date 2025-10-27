@@ -570,7 +570,7 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
         cached = None
         for tid in tool_ids:
             block = THINKING_CACHE.get(tid)
-            if block and block.get("signature") is not None:
+            if block and isinstance(block.get("signature"), str) and block.get("signature").strip():
                 cached = block
                 break
         if cached:
@@ -1009,8 +1009,9 @@ async def convert_anthropic_stream_to_openai(
                     # Use the first thinking block captured.
                     saved_block = None
                     for acc in current_thinking_blocks.values():
-                        if acc.get("thinking") and acc.get("signature") is not None:
-                            saved_block = {"type": "thinking", "thinking": acc["thinking"], "signature": acc["signature"]}
+                        sig = acc.get("signature")
+                        if acc.get("thinking") and isinstance(sig, str) and sig.strip():
+                            saved_block = {"type": "thinking", "thinking": acc["thinking"], "signature": sig}
                             break
                     if saved_block and current_tool_use_ids:
                         for tid in current_tool_use_ids:
