@@ -525,7 +525,8 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
     # Enable thinking if reasoning level is specified
     if reasoning_level and reasoning_level in REASONING_BUDGET_MAP:
         thinking_budget = REASONING_BUDGET_MAP[reasoning_level]
-        anthropic_request["messages"] = _ensure_thinking_prefix(anthropic_request["messages"])
+        # Do NOT inject a thinking content block into messages; Anthropic expects
+        # thinking blocks to be model-generated and signed. Use top-level parameter only.
         anthropic_request["thinking"] = {
             "type": "enabled",
             "budget_tokens": thinking_budget
