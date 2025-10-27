@@ -319,7 +319,7 @@ def _ensure_thinking_prefix(messages: List[Dict[str, Any]]) -> List[Dict[str, An
 
         if isinstance(content, str):
             blocks: List[Dict[str, Any]] = []
-            blocks.append({"type": "thinking", "text": ""})
+            blocks.append({"type": "thinking", "thinking": ""})
             if content:
                 blocks.append({"type": "text", "text": content})
             new_message["content"] = blocks
@@ -327,15 +327,15 @@ def _ensure_thinking_prefix(messages: List[Dict[str, Any]]) -> List[Dict[str, An
             if content and isinstance(content[0], dict) and content[0].get("type") in ("thinking", "redacted_thinking"):
                 new_message["content"] = content
             else:
-                new_content: List[Dict[str, Any]] = [{"type": "thinking", "text": ""}]
+                new_content: List[Dict[str, Any]] = [{"type": "thinking", "thinking": ""}]
                 for block in content:
                     new_content.append(block)
                 new_message["content"] = new_content
         elif isinstance(content, dict):
             # Rare case: single dict, wrap it
-            new_message["content"] = [{"type": "thinking", "text": ""}, content]
+            new_message["content"] = [{"type": "thinking", "thinking": ""}, content]
         else:
-            new_message["content"] = [{"type": "thinking", "text": ""}]
+            new_message["content"] = [{"type": "thinking", "thinking": ""}]
 
         updated_messages.append(new_message)
 
