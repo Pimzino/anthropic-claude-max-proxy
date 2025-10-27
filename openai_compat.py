@@ -187,11 +187,41 @@ def convert_openai_messages_to_anthropic(openai_messages: List[Dict[str, Any]]) 
 
             # Handle tool calls in assistant messages
             if role == "assistant" and "tool_calls" in msg:
-                anthropic_msg["content"] = convert_openai_tool_calls_to_anthropic(msg["tool_calls"])
+                # Convert existing content to array format if needed
+                existing_content = anthropic_msg["content"]
+                if isinstance(existing_content, str):
+                    if existing_content:
+                        content_array = [{"type": "text", "text": existing_content}]
+                    else:
+                        content_array = []
+                elif isinstance(existing_content, list):
+                    content_array = existing_content
+                else:
+                    content_array = []
+
+                # Append tool_use blocks to existing content
+                tool_use_blocks = convert_openai_tool_calls_to_anthropic(msg["tool_calls"])
+                content_array.extend(tool_use_blocks)
+                anthropic_msg["content"] = content_array
 
             # Handle function calls (legacy OpenAI format)
             if role == "assistant" and "function_call" in msg:
-                anthropic_msg["content"] = convert_openai_function_call_to_anthropic(msg["function_call"])
+                # Convert existing content to array format if needed
+                existing_content = anthropic_msg["content"]
+                if isinstance(existing_content, str):
+                    if existing_content:
+                        content_array = [{"type": "text", "text": existing_content}]
+                    else:
+                        content_array = []
+                elif isinstance(existing_content, list):
+                    content_array = existing_content
+                else:
+                    content_array = []
+
+                # Append function call block to existing content
+                function_blocks = convert_openai_function_call_to_anthropic(msg["function_call"])
+                content_array.extend(function_blocks)
+                anthropic_msg["content"] = content_array
 
             anthropic_messages.append(anthropic_msg)
 
