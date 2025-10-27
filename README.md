@@ -26,14 +26,13 @@ This proxy is aligned with the [OpenCode](https://github.com/anthropics/opencode
 
 **API Endpoint:**
 - Base URL: `https://api.anthropic.com/v1/messages` (no query parameters)
-- Uses header-based beta features instead of `?beta=true` query parameter
+- Uses header-based beta features
 
 **Beta Features (Messages API):**
 - `claude-code-20250219` - Claude Code integration
+- `oauth-2025-04-20` - OAuth authentication support (required for Bearer tokens)
 - `interleaved-thinking-2025-05-14` - Extended thinking support
 - `fine-grained-tool-streaming-2025-05-14` - Tool streaming support
-
-**Note:** The `oauth-2025-04-20` beta is NOT included in message requests. It's only for OAuth token endpoints and gates features not available to all Max users (like long context beta).
 
 **OAuth Flow (Max/Pro authentication):**
 1. User authorizes via `https://claude.ai/oauth/authorize` (with `code=true` parameter)
