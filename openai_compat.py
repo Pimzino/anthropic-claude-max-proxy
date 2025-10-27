@@ -5,10 +5,47 @@ Converts between OpenAI chat completion format and Anthropic messages format.
 import time
 import json
 import re
-from typing import Dict, Any, List, Optional, AsyncIterator
+from typing import Dict, Any, List, Optional, AsyncIterator, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Reasoning effort to thinking budget mapping
+# Maps OpenAI's reasoning_effort levels to Anthropic's thinking budget_tokens
+REASONING_BUDGET_MAP = {
+    "low": 8000,
+    "medium": 16000,
+    "high": 32000
+}
+
+
+def parse_reasoning_model(model_name: str) -> Tuple[str, Optional[str]]:
+    """
+    Parse model name to extract base model and reasoning level.
+
+    Args:
+        model_name: Model name, potentially with -reasoning-{level} suffix
+
+    Returns:
+        tuple: (base_model_name, reasoning_level) where reasoning_level is None if not a reasoning model
+
+    Examples:
+        "claude-sonnet-4-20250514" -> ("claude-sonnet-4-20250514", None)
+        "claude-sonnet-4-20250514-reasoning-high" -> ("claude-sonnet-4-20250514", "high")
+    """
+    if "-reasoning-" in model_name:
+        parts = model_name.rsplit("-reasoning-", 1)
+        base_model = parts[0]
+        reasoning_level = parts[1] if len(parts) > 1 else None
+
+        # Validate reasoning level
+        if reasoning_level and reasoning_level in REASONING_BUDGET_MAP:
+            return base_model, reasoning_level
+        else:
+            logger.warning(f"Invalid reasoning level in model name: {reasoning_level}. Valid values: {list(REASONING_BUDGET_MAP.keys())}")
+            return model_name, None
+
+    return model_name, None
 
 
 def convert_openai_messages_to_anthropic(openai_messages: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], Optional[str]]:
@@ -215,9 +252,13 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
     # Convert messages
     messages, system_text = convert_openai_messages_to_anthropic(openai_request.get("messages", []))
 
-    # Build Anthropic request
+    # Parse model name for reasoning variants
+    model_name = openai_request.get("model", "claude-sonnet-4-5-20250929")
+    base_model, model_reasoning_level = parse_reasoning_model(model_name)
+
+    # Build Anthropic request (use base model name, not the reasoning variant)
     anthropic_request = {
-        "model": openai_request.get("model", "claude-sonnet-4-20250514"),
+        "model": base_model,
         "messages": messages,
         "max_tokens": openai_request.get("max_tokens", 4096),
         "stream": openai_request.get("stream", False)
@@ -286,6 +327,44 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
                     "type": "tool",
                     "name": function_name
                 }
+
+    # Handle reasoning/thinking
+    # Priority: reasoning_effort parameter > model variant > no thinking
+    reasoning_level = None
+
+    # Check for explicit reasoning_effort parameter (takes precedence)
+    if "reasoning_effort" in openai_request and openai_request["reasoning_effort"]:
+        reasoning_level = openai_request["reasoning_effort"]
+        logger.debug(f"Using reasoning_effort parameter: {reasoning_level}")
+    # Check for model-based reasoning variant
+    elif model_reasoning_level:
+        reasoning_level = model_reasoning_level
+        logger.debug(f"Using model-based reasoning: {reasoning_level} (from {model_name})")
+
+    # Enable thinking if reasoning level is specified
+    if reasoning_level and reasoning_level in REASONING_BUDGET_MAP:
+        thinking_budget = REASONING_BUDGET_MAP[reasoning_level]
+        anthropic_request["thinking"] = {
+            "type": "enabled",
+            "budget_tokens": thinking_budget
+        }
+
+        # Ensure max_tokens is sufficient for thinking + response
+        # Reserve at least 1024 tokens for the actual response content
+        min_response_tokens = 1024
+        required_total = thinking_budget + min_response_tokens
+
+        if anthropic_request["max_tokens"] < required_total:
+            logger.warning(
+                f"Increasing max_tokens from {anthropic_request['max_tokens']} to {required_total} "
+                f"(thinking: {thinking_budget} + response: {min_response_tokens}) for reasoning level '{reasoning_level}'"
+            )
+            anthropic_request["max_tokens"] = required_total
+
+        logger.debug(
+            f"Enabled thinking with budget {thinking_budget} tokens (reasoning_effort: {reasoning_level}), "
+            f"max_tokens: {anthropic_request['max_tokens']}"
+        )
 
     return anthropic_request
 

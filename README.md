@@ -11,7 +11,7 @@ Pure Anthropic proxy for Claude Pro/Max subscriptions using OAuth.
 
 This tool:
 - Is NOT affiliated with or endorsed by Anthropic
-- Uses undocumented OAuth flows from Claude Code
+- Uses undocumented OAuth flows from Claude Code (OpenCode)
 - May violate Anthropic's Terms of Service
 - Could stop working at any time without notice
 - Comes with NO WARRANTY or support
@@ -19,6 +19,28 @@ This tool:
 **USE AT YOUR OWN RISK. The authors assume no liability for any consequences.**
 
 For official access, use Claude Code or Anthropic's API with console API keys.
+
+## Implementation Details
+
+This proxy is aligned with the [OpenCode](https://github.com/anthropics/opencode) implementation:
+
+**API Endpoint:**
+- Base URL: `https://api.anthropic.com/v1/messages` (no query parameters)
+- Uses header-based beta features instead of `?beta=true` query parameter
+
+**Beta Features:**
+- `claude-code-20250219` - Claude Code integration
+- `oauth-2025-04-20` - OAuth support
+- `interleaved-thinking-2025-05-14` - Extended thinking support
+- `fine-grained-tool-streaming-2025-05-14` - Tool streaming support
+
+**OAuth Endpoints:**
+- Authorization: `https://claude.ai/oauth/authorize`
+- Token exchange/refresh: `https://console.anthropic.com/v1/oauth/token`
+- API key creation: `https://api.anthropic.com/api/oauth/claude_cli/create_api_key`
+
+**Cache Control:**
+- Automatic ephemeral cache control on system messages
 
 ## Prerequisites
 
@@ -90,10 +112,57 @@ The OpenAI compatibility layer supports:
 - ✅ Vision/Image inputs (URL and base64)
 - ✅ System messages
 - ✅ All standard parameters (temperature, top_p, max_tokens, stop sequences)
+- ✅ Reasoning/Thinking support via `reasoning_effort` parameter or model variants
 
 ## Available Models
 
 - Supports all Anthropic Models that you have access to with your Claude Pro / Max subscription.
+
+## Reasoning/Thinking Support
+
+The proxy supports Anthropic's extended thinking mode through OpenAI-compatible APIs. Thinking is **only enabled when explicitly requested**.
+
+### Reasoning Budget Mapping
+
+| OpenAI `reasoning_effort` | Anthropic `thinking.budget_tokens` |
+|---------------------------|-------------------------------------|
+| `low`                     | 8,000 tokens                        |
+| `medium`                  | 16,000 tokens                       |
+| `high`                    | 32,000 tokens                       |
+
+### Two Ways to Enable Reasoning
+
+#### 1. Using `reasoning_effort` Parameter
+
+```python
+response = client.chat.completions.create(
+    model="claude-sonnet-4-20250514",
+    messages=[{"role": "user", "content": "Solve this complex problem..."}],
+    reasoning_effort="high"  # Enables thinking with 32k token budget
+)
+```
+
+#### 2. Using Reasoning Model Variants
+
+```python
+response = client.chat.completions.create(
+    model="claude-sonnet-4-20250514-reasoning-high",  # Auto-enables thinking
+    messages=[{"role": "user", "content": "Solve this complex problem..."}]
+)
+```
+
+Available reasoning model variants:
+- `{model-name}-reasoning-low` (8k thinking budget)
+- `{model-name}-reasoning-medium` (16k thinking budget)
+- `{model-name}-reasoning-high` (32k thinking budget)
+
+**Note:** If both `reasoning_effort` parameter and reasoning model variant are specified, the parameter takes precedence.
+
+### Automatic max_tokens Adjustment
+
+When reasoning is enabled, the proxy automatically ensures `max_tokens` is sufficient:
+- Minimum required = thinking_budget + 1024 (for response)
+- If your `max_tokens` is too low, it will be automatically increased with a warning logged
 
 ## Usage Examples
 
@@ -107,7 +176,7 @@ client = openai.OpenAI(
     base_url="http://localhost:8081/v1"
 )
 
-# Basic chat completion
+# Basic chat completion (no reasoning)
 response = client.chat.completions.create(
     model="claude-sonnet-4-20250514",
     messages=[
@@ -118,6 +187,21 @@ response = client.chat.completions.create(
 )
 
 print(response.choices[0].message.content)
+
+# With reasoning enabled via parameter
+response = client.chat.completions.create(
+    model="claude-sonnet-4-20250514",
+    messages=[{"role": "user", "content": "Explain quantum entanglement"}],
+    reasoning_effort="high",  # Enables extended thinking
+    max_tokens=4000
+)
+
+# With reasoning enabled via model variant
+response = client.chat.completions.create(
+    model="claude-sonnet-4-20250514-reasoning-medium",
+    messages=[{"role": "user", "content": "Solve this logic puzzle"}],
+    max_tokens=4000
+)
 
 # Streaming
 for chunk in client.chat.completions.create(
@@ -197,8 +281,13 @@ response = client.messages.create(
 - Vision (image inputs via URL or base64)
 - System messages
 - Standard parameters (temperature, top_p, max_tokens, stop)
+- Extended thinking/reasoning via `reasoning_effort` parameter
+- Model variants with pre-configured thinking budgets
+  - `claude-sonnet-4-20250514-reasoning-low` (8k tokens)
+  - `claude-sonnet-4-20250514-reasoning-medium` (16k tokens)
+  - `claude-sonnet-4-20250514-reasoning-high` (32k tokens)
 
-These are features that are not available or not user friendly in CC.
+These features provide compatibility with OpenAI's API format while leveraging Anthropic's extended thinking capabilities that are not available or not user friendly in Claude Code.
 
 ## Configuration Priority
 

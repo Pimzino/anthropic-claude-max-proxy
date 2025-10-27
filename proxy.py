@@ -83,6 +83,7 @@ class OpenAIChatCompletionRequest(BaseModel):
     tool_choice: Optional[Any] = None  # Can be string or dict
     functions: Optional[List[Dict[str, Any]]] = None  # Legacy
     function_call: Optional[Any] = None  # Legacy
+    reasoning_effort: Optional[str] = None  # "low", "medium", "high" - maps to Anthropic thinking budget
 
 
 # Thinking variant parsing removed - clients send thinking parameters directly
@@ -227,8 +228,8 @@ def inject_claude_code_system_message(request_data: Dict[str, Any]) -> Dict[str,
 
 async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token: str, client_beta_headers: Optional[str] = None) -> httpx.Response:
     """Make a request to Anthropic API"""
-    # Required beta headers for authentication flow
-    required_betas = ["claude-code-20250219", "oauth-2025-04-20", "fine-grained-tool-streaming-2025-05-14"]
+    # Required beta headers matching OpenCode implementation
+    required_betas = ["claude-code-20250219", "oauth-2025-04-20", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
 
     # Merge client beta headers if provided
     if client_beta_headers:
@@ -242,7 +243,7 @@ async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=30.0)) as client:
         response = await client.post(
-            "https://api.anthropic.com/v1/messages?beta=true",
+            "https://api.anthropic.com/v1/messages",
             json=anthropic_request,
             headers={
                 "host": "api.anthropic.com",
@@ -272,8 +273,8 @@ async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token
 
 async def stream_anthropic_response(request_id: str, anthropic_request: Dict[str, Any], access_token: str, client_beta_headers: Optional[str] = None) -> AsyncIterator[str]:
     """Stream response from Anthropic API"""
-    # Required beta headers for authentication flow
-    required_betas = ["claude-code-20250219", "oauth-2025-04-20", "fine-grained-tool-streaming-2025-05-14"]
+    # Required beta headers matching OpenCode implementation
+    required_betas = ["claude-code-20250219", "oauth-2025-04-20", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
 
     # Merge client beta headers if provided
     if client_beta_headers:
@@ -288,7 +289,7 @@ async def stream_anthropic_response(request_id: str, anthropic_request: Dict[str
     async with httpx.AsyncClient(timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=30.0)) as client:
         async with client.stream(
             "POST",
-            "https://api.anthropic.com/v1/messages?beta=true",
+            "https://api.anthropic.com/v1/messages",
             json=anthropic_request,
             headers={
                 "host": "api.anthropic.com",
@@ -358,57 +359,65 @@ async def health_check():
 
 @app.get("/v1/models")
 async def list_models():
-    """OpenAI-compatible models endpoint"""
-    models = [
+    """OpenAI-compatible models endpoint with reasoning variants"""
+    # Current Claude models only (legacy models removed)
+    base_models = [
+        {
+            "id": "claude-sonnet-4-5-20250929",
+            "object": "model",
+            "created": 1727654400,  # Sept 29, 2025
+            "owned_by": "anthropic",
+            "context_length": 200000,
+            "max_completion_tokens": 65536
+        },
+        {
+            "id": "claude-haiku-4-5-20251001",
+            "object": "model",
+            "created": 1727827200,  # Oct 1, 2025
+            "owned_by": "anthropic",
+            "context_length": 200000,
+            "max_completion_tokens": 65536
+        },
         {
             "id": "claude-opus-4-1-20250805",
             "object": "model",
-            "created": 1687882411,
+            "created": 1722816000,  # Aug 5, 2025
             "owned_by": "anthropic",
             "context_length": 200000,
-            "max_completion_tokens": 8192
-        },
-        {
-            "id": "claude-opus-4-20250514",
-            "object": "model",
-            "created": 1687882411,
-            "owned_by": "anthropic",
-            "context_length": 200000,
-            "max_completion_tokens": 8192
+            "max_completion_tokens": 32768
         },
         {
             "id": "claude-sonnet-4-20250514",
             "object": "model",
-            "created": 1687882411,
+            "created": 1715644800,  # May 14, 2025
             "owned_by": "anthropic",
             "context_length": 200000,
-            "max_completion_tokens": 8192
-        },
-        {
-            "id": "claude-3-7-sonnet-20250219",
-            "object": "model",
-            "created": 1687882411,
-            "owned_by": "anthropic",
-            "context_length": 200000,
-            "max_completion_tokens": 8192
-        },
-        {
-            "id": "claude-3-5-haiku-20241022",
-            "object": "model",
-            "created": 1687882411,
-            "owned_by": "anthropic",
-            "context_length": 200000,
-            "max_completion_tokens": 4096
-        },
-        {
-            "id": "claude-3-haiku-20240307",
-            "object": "model",
-            "created": 1687882411,
-            "owned_by": "anthropic",
-            "context_length": 200000,
-            "max_completion_tokens": 4096
+            "max_completion_tokens": 65536
         }
     ]
+
+    # Generate models list with reasoning variants
+    models = []
+
+    # Reasoning budget mapping
+    reasoning_budgets = {
+        "low": 8000,
+        "medium": 16000,
+        "high": 32000
+    }
+
+    for base_model in base_models:
+        # Add base model (no reasoning)
+        models.append(base_model)
+
+        # Add reasoning variants for each level
+        for level, budget in reasoning_budgets.items():
+            reasoning_model = base_model.copy()
+            reasoning_model["id"] = f"{base_model['id']}-reasoning-{level}"
+            # Add metadata for reasoning variants
+            reasoning_model["reasoning_capable"] = True
+            reasoning_model["reasoning_budget"] = budget
+            models.append(reasoning_model)
 
     return {
         "object": "list",
@@ -466,7 +475,7 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
     client_beta_headers = headers_dict.get("anthropic-beta")
 
     # Log the final beta headers that will be sent
-    required_betas = ["claude-code-20250219", "oauth-2025-04-20", "fine-grained-tool-streaming-2025-05-14"]
+    required_betas = ["claude-code-20250219", "oauth-2025-04-20", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
     if client_beta_headers:
         client_betas = [beta.strip() for beta in client_beta_headers.split(",")]
         all_betas = list(dict.fromkeys(required_betas + client_betas))

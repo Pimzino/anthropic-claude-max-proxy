@@ -11,11 +11,12 @@ LOG_LEVEL = config.get("LOG_LEVEL", "server.log_level", "info")
 BIND_ADDRESS = config.get("BIND_ADDRESS", "server.bind_address", "0.0.0.0")
 
 # Model configuration
-DEFAULT_MODEL = config.get("DEFAULT_MODEL", "models.default", "claude-sonnet-4-0")
+DEFAULT_MODEL = config.get("DEFAULT_MODEL", "models.default", "claude-sonnet-4-5-20250929")
 
 # Anthropic API configuration (hardcoded - not user configurable)
 ANTHROPIC_VERSION = "2023-06-01"
-ANTHROPIC_BETA = "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14"
+# Beta features matching OpenCode implementation
+ANTHROPIC_BETA = "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"
 API_BASE = "https://api.anthropic.com"
 REQUEST_TIMEOUT = config.get("REQUEST_TIMEOUT", "api.request_timeout", 120.0)
 
