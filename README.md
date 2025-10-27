@@ -33,12 +33,19 @@ This proxy is aligned with the [OpenCode](https://github.com/anthropics/opencode
 - `interleaved-thinking-2025-05-14` - Extended thinking support
 - `fine-grained-tool-streaming-2025-05-14` - Tool streaming support
 
-**Note:** The `oauth-2025-04-20` beta is NOT included in message requests. It's only used for OAuth token operations and enables features that require Max subscription (like long context beta).
+**Note:** The `oauth-2025-04-20` beta is NOT included in message requests. It's only for OAuth token endpoints and gates features not available to all Max users (like long context beta).
 
-**OAuth Endpoints:**
-- Authorization: `https://claude.ai/oauth/authorize`
-- Token exchange/refresh: `https://console.anthropic.com/v1/oauth/token`
-- API key creation: `https://api.anthropic.com/api/oauth/claude_cli/create_api_key`
+**OAuth Flow (matches OpenCode):**
+1. User authorizes via `https://claude.ai/oauth/authorize`
+2. Authorization code exchanged at `https://console.anthropic.com/v1/oauth/token`
+3. **OAuth token used to create permanent API key** at `https://api.anthropic.com/api/oauth/claude_cli/create_api_key`
+4. API key used for all message requests (no expiration, no feature gating)
+
+**Why API keys instead of OAuth tokens?**
+- OAuth tokens require `oauth-2025-04-20` beta header
+- That beta gates features not available to all Max users (like long context beta)
+- API keys work for all Max users without feature restrictions
+- This matches OpenCode's implementation
 
 **Cache Control:**
 - Automatic ephemeral cache control on system messages

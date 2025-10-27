@@ -86,8 +86,45 @@ class OAuthManager:
 
         return auth_url
 
+    async def create_api_key(self, access_token: str) -> Optional[str]:
+        """Create an API key from OAuth access token (matches OpenCode implementation)"""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        logger.info("Creating API key from OAuth token...")
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(
+                    "https://api.anthropic.com/api/oauth/claude_cli/create_api_key",
+                    headers={
+                        "Content-Type": "application/json",
+                        "authorization": f"Bearer {access_token}"
+                    }
+                )
+
+                if response.status_code != 200:
+                    logger.error(f"API key creation failed with status {response.status_code}: {response.text}")
+                    return None
+
+                api_key_data = response.json()
+                api_key = api_key_data.get("raw_key")
+
+                if api_key:
+                    logger.info("Successfully created API key from OAuth token")
+                    return api_key
+                else:
+                    logger.error(f"API key not found in response: {api_key_data}")
+                    return None
+
+            except Exception as e:
+                logger.error(f"API key creation failed with exception: {e}")
+                return None
+
     async def exchange_code(self, code: str) -> Dict[str, Any]:
         """Exchange authorization code for tokens (plan.md section 3.4)"""
+        import logging
+        logger = logging.getLogger(__name__)
+
         # Split the code and state (they come as "code#state")
         parts = code.split("#")
         actual_code = parts[0]
@@ -123,12 +160,18 @@ class OAuthManager:
             raise Exception(f"Token exchange failed: {response.status_code} - {error_detail}")
 
         token_data = response.json()
+        access_token = token_data["access_token"]
 
-        # Store tokens securely
+        # Create API key from OAuth token (matching OpenCode behavior)
+        logger.info("OAuth tokens obtained, creating API key...")
+        api_key = await self.create_api_key(access_token)
+
+        # Store tokens securely with API key
         self.storage.save_tokens(
             access_token=token_data["access_token"],
             refresh_token=token_data["refresh_token"],
-            expires_in=token_data.get("expires_in", 3600)
+            expires_in=token_data.get("expires_in", 3600),
+            api_key=api_key
         )
 
         # Clear PKCE values after successful exchange
@@ -136,7 +179,12 @@ class OAuthManager:
         self.code_verifier = None
         self.state = None
 
-        return {"status": "success", "message": "Tokens obtained successfully"}
+        if api_key:
+            logger.info("Authentication complete with API key")
+            return {"status": "success", "message": "Tokens and API key obtained successfully"}
+        else:
+            logger.warning("Authentication complete but API key creation failed (will use OAuth tokens)")
+            return {"status": "success", "message": "Tokens obtained successfully (API key creation failed)"}
 
     async def refresh_tokens(self) -> bool:
         """Refresh expired tokens (plan.md section 3.5)"""
@@ -181,10 +229,18 @@ class OAuthManager:
                 return False
 
     async def get_valid_token_async(self) -> Optional[str]:
-        """Get a valid access token, refreshing if necessary (async version for FastAPI)"""
+        """Get a valid token for API requests (prefers API key over OAuth token)"""
         import logging
         logger = logging.getLogger(__name__)
 
+        # Prefer API key if available (doesn't expire, no beta feature gating)
+        api_key = self.storage.get_api_key()
+        if api_key:
+            logger.debug("Using API key for authentication")
+            return api_key
+
+        # Fallback to OAuth token (for backward compatibility)
+        logger.debug("No API key found, using OAuth token")
         if not self.storage.is_token_expired():
             return self.storage.get_access_token()
 
@@ -197,7 +253,18 @@ class OAuthManager:
         return None
 
     def get_valid_token(self) -> Optional[str]:
-        """Get a valid access token, refreshing if necessary (sync version for CLI)"""
+        """Get a valid token for API requests (prefers API key over OAuth token)"""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Prefer API key if available (doesn't expire, no beta feature gating)
+        api_key = self.storage.get_api_key()
+        if api_key:
+            logger.debug("Using API key for authentication")
+            return api_key
+
+        # Fallback to OAuth token (for backward compatibility)
+        logger.debug("No API key found, using OAuth token")
         if not self.storage.is_token_expired():
             return self.storage.get_access_token()
 

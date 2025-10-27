@@ -23,7 +23,7 @@ class TokenStorage:
             if platform.system() != "Windows":
                 os.chmod(parent_dir, 0o700)
 
-    def save_tokens(self, access_token: str, refresh_token: str, expires_in: int):
+    def save_tokens(self, access_token: str, refresh_token: str, expires_in: int, api_key: Optional[str] = None):
         """Save tokens with computed expiry time (plan.md section 3.4)"""
         expires_at = int(time.time()) + expires_in
         data = {
@@ -31,6 +31,10 @@ class TokenStorage:
             "refresh_token": refresh_token,
             "expires_at": expires_at
         }
+
+        # Add API key if provided (created from OAuth token)
+        if api_key:
+            data["api_key"] = api_key
 
         # Write tokens to file
         self.token_path.write_text(json.dumps(data, indent=2))
@@ -81,6 +85,28 @@ class TokenStorage:
         if not tokens:
             return None
         return tokens.get("refresh_token")
+
+    def get_api_key(self) -> Optional[str]:
+        """Get the API key (created from OAuth token)"""
+        tokens = self.load_tokens()
+        if not tokens:
+            return None
+        return tokens.get("api_key")
+
+    def save_api_key(self, api_key: str):
+        """Save API key to existing token data"""
+        tokens = self.load_tokens()
+        if not tokens:
+            tokens = {}
+
+        tokens["api_key"] = api_key
+
+        # Write updated tokens to file
+        self.token_path.write_text(json.dumps(tokens, indent=2))
+
+        # Set file permissions to 600 on Unix-like systems
+        if platform.system() != "Windows":
+            os.chmod(self.token_path, 0o600)
 
     def get_status(self) -> Dict[str, Any]:
         """Get token status without exposing secrets (plan.md section 4.4)"""

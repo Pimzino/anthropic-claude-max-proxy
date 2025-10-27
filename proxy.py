@@ -228,8 +228,8 @@ def inject_claude_code_system_message(request_data: Dict[str, Any]) -> Dict[str,
 
 async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token: str, client_beta_headers: Optional[str] = None) -> httpx.Response:
     """Make a request to Anthropic API"""
-    # Required beta headers matching OpenCode anthropic-auth implementation
-    required_betas = ["oauth-2025-04-20", "claude-code-20250219", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
+    # Required beta headers matching OpenCode main provider (oauth-2025-04-20 excluded - not all Max users have access)
+    required_betas = ["claude-code-20250219", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
 
     # Merge client beta headers if provided
     if client_beta_headers:
@@ -241,40 +241,50 @@ async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token
 
     beta_header_value = ",".join(all_betas)
 
+    # Determine if using API key (starts with sk-ant-) or OAuth token
+    is_api_key = access_token.startswith("sk-ant-")
+
+    headers = {
+        "host": "api.anthropic.com",
+        "Accept": "application/json",
+        "X-Stainless-Retry-Count": "0",
+        "X-Stainless-Timeout": "600",
+        "X-Stainless-Lang": "js",
+        "X-Stainless-Package-Version": "0.60.0",
+        "X-Stainless-OS": "Windows",
+        "X-Stainless-Arch": "x64",
+        "X-Stainless-Runtime": "node",
+        "X-Stainless-Runtime-Version": "v22.19.0",
+        "anthropic-dangerous-direct-browser-access": "true",
+        "anthropic-version": "2023-06-01",
+        "x-app": "cli",
+        "User-Agent": "claude-cli/1.0.113 (external, cli)",
+        "content-type": "application/json",
+        "anthropic-beta": beta_header_value,
+        "x-stainless-helper-method": "stream",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors"
+    }
+
+    # Use appropriate auth header
+    if is_api_key:
+        headers["x-api-key"] = access_token
+    else:
+        headers["authorization"] = f"Bearer {access_token}"
+
     async with httpx.AsyncClient(timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=30.0)) as client:
         response = await client.post(
             "https://api.anthropic.com/v1/messages",
             json=anthropic_request,
-            headers={
-                "host": "api.anthropic.com",
-                "Accept": "application/json",
-                "X-Stainless-Retry-Count": "0",
-                "X-Stainless-Timeout": "600",
-                "X-Stainless-Lang": "js",
-                "X-Stainless-Package-Version": "0.60.0",
-                "X-Stainless-OS": "Windows",
-                "X-Stainless-Arch": "x64",
-                "X-Stainless-Runtime": "node",
-                "X-Stainless-Runtime-Version": "v22.19.0",
-                "anthropic-dangerous-direct-browser-access": "true",
-                "anthropic-version": "2023-06-01",
-                "authorization": f"Bearer {access_token}",
-                "x-app": "cli",
-                "User-Agent": "claude-cli/1.0.113 (external, cli)",
-                "content-type": "application/json",
-                "anthropic-beta": beta_header_value,
-                "x-stainless-helper-method": "stream",
-                "accept-language": "*",
-                "sec-fetch-mode": "cors"
-            }
+            headers=headers
         )
         return response
 
 
 async def stream_anthropic_response(request_id: str, anthropic_request: Dict[str, Any], access_token: str, client_beta_headers: Optional[str] = None) -> AsyncIterator[str]:
     """Stream response from Anthropic API"""
-    # Required beta headers matching OpenCode anthropic-auth implementation
-    required_betas = ["oauth-2025-04-20", "claude-code-20250219", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
+    # Required beta headers matching OpenCode main provider (oauth-2025-04-20 excluded - not all Max users have access)
+    required_betas = ["claude-code-20250219", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
 
     # Merge client beta headers if provided
     if client_beta_headers:
@@ -286,33 +296,43 @@ async def stream_anthropic_response(request_id: str, anthropic_request: Dict[str
 
     beta_header_value = ",".join(all_betas)
 
+    # Determine if using API key (starts with sk-ant-) or OAuth token
+    is_api_key = access_token.startswith("sk-ant-")
+
+    headers = {
+        "host": "api.anthropic.com",
+        "Accept": "application/json",
+        "X-Stainless-Retry-Count": "0",
+        "X-Stainless-Timeout": "600",
+        "X-Stainless-Lang": "js",
+        "X-Stainless-Package-Version": "0.60.0",
+        "X-Stainless-OS": "Windows",
+        "X-Stainless-Arch": "x64",
+        "X-Stainless-Runtime": "node",
+        "X-Stainless-Runtime-Version": "v22.19.0",
+        "anthropic-dangerous-direct-browser-access": "true",
+        "anthropic-version": "2023-06-01",
+        "x-app": "cli",
+        "User-Agent": "claude-cli/1.0.113 (external, cli)",
+        "content-type": "application/json",
+        "anthropic-beta": beta_header_value,
+        "x-stainless-helper-method": "stream",
+        "accept-language": "*",
+        "sec-fetch-mode": "cors"
+    }
+
+    # Use appropriate auth header
+    if is_api_key:
+        headers["x-api-key"] = access_token
+    else:
+        headers["authorization"] = f"Bearer {access_token}"
+
     async with httpx.AsyncClient(timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=30.0)) as client:
         async with client.stream(
             "POST",
             "https://api.anthropic.com/v1/messages",
             json=anthropic_request,
-            headers={
-                "host": "api.anthropic.com",
-                "Accept": "application/json",
-                "X-Stainless-Retry-Count": "0",
-                "X-Stainless-Timeout": "600",
-                "X-Stainless-Lang": "js",
-                "X-Stainless-Package-Version": "0.60.0",
-                "X-Stainless-OS": "Windows",
-                "X-Stainless-Arch": "x64",
-                "X-Stainless-Runtime": "node",
-                "X-Stainless-Runtime-Version": "v22.19.0",
-                "anthropic-dangerous-direct-browser-access": "true",
-                "anthropic-version": "2023-06-01",
-                "authorization": f"Bearer {access_token}",
-                "x-app": "cli",
-                "User-Agent": "claude-cli/1.0.113 (external, cli)",
-                "content-type": "application/json",
-                "anthropic-beta": beta_header_value,
-                "x-stainless-helper-method": "stream",
-                "accept-language": "*",
-                "sec-fetch-mode": "cors"
-            }
+            headers=headers
         ) as response:
             if response.status_code != 200:
                 # For error responses, stream them back as SSE events
@@ -475,7 +495,7 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
     client_beta_headers = headers_dict.get("anthropic-beta")
 
     # Log the final beta headers that will be sent
-    required_betas = ["oauth-2025-04-20", "claude-code-20250219", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
+    required_betas = ["claude-code-20250219", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
     if client_beta_headers:
         client_betas = [beta.strip() for beta in client_beta_headers.split(",")]
         all_betas = list(dict.fromkeys(required_betas + client_betas))

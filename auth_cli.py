@@ -96,16 +96,25 @@ class CLIAuthFlow:
             result = await self.oauth.exchange_code(code.strip())
 
             if result and result.get("status") == "success":
-                console.print("[green][OK][/green] Tokens obtained successfully")
+                console.print("[green][OK][/green] Authentication successful!")
                 if hasattr(__main__, '_proxy_debug_logger'):
                     __main__._proxy_debug_logger.debug("[AUTH] Tokens obtained successfully")
 
-                # Show token status
-                status = self.storage.get_status()
-                if status["expires_at"]:
-                    console.print(f"Token expires at: {status['expires_at']}")
+                # Show authentication method
+                api_key = self.storage.get_api_key()
+                if api_key:
+                    console.print("[green][OK][/green] API key created from OAuth token")
+                    console.print("[dim]Using API key for requests (no feature gating)[/dim]")
                     if hasattr(__main__, '_proxy_debug_logger'):
-                        __main__._proxy_debug_logger.debug(f"[AUTH] Token expires at: {status['expires_at']}")
+                        __main__._proxy_debug_logger.debug("[AUTH] API key created successfully")
+                else:
+                    console.print("[yellow]Note:[/yellow] API key creation failed, using OAuth tokens")
+                    # Show token status
+                    status = self.storage.get_status()
+                    if status["expires_at"]:
+                        console.print(f"Token expires at: {status['expires_at']}")
+                        if hasattr(__main__, '_proxy_debug_logger'):
+                            __main__._proxy_debug_logger.debug(f"[AUTH] Token expires at: {status['expires_at']}")
 
                 return True
             else:
