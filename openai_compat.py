@@ -5,6 +5,7 @@ Converts between OpenAI chat completion format and Anthropic messages format.
 import time
 import json
 import re
+from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, AsyncIterator, Tuple, TYPE_CHECKING
 import logging
 
@@ -12,6 +13,84 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from stream_debug import StreamTracer
+
+
+@dataclass
+class _SSEEvent:
+    """Represents a parsed Server-Sent Events frame."""
+    event: Optional[str]
+    data: str
+
+
+class _SSEParser:
+    """Incremental parser for text/event-stream payloads."""
+
+    def __init__(self) -> None:
+        self._buffer = ""
+        self._current_event: Optional[str] = None
+        self._current_data: List[str] = []
+
+    def feed(self, chunk: str) -> List[_SSEEvent]:
+        """Consume raw chunk text and yield completed events."""
+        events: List[_SSEEvent] = []
+        if not chunk:
+            return events
+
+        self._buffer += chunk
+
+        while True:
+            newline_idx = self._buffer.find("\n")
+            if newline_idx == -1:
+                break
+
+            line = self._buffer[:newline_idx]
+            self._buffer = self._buffer[newline_idx + 1:]
+
+            # Trim CR from Windows-style endings
+            if line.endswith("\r"):
+                line = line[:-1]
+
+            if line == "":
+                # Blank line terminates the current event
+                if self._current_event is not None or self._current_data:
+                    data = "\n".join(self._current_data)
+                    events.append(_SSEEvent(event=self._current_event, data=data))
+                self._current_event = None
+                self._current_data = []
+                continue
+
+            if line.startswith(":"):
+                # Comment line - ignore
+                continue
+
+            if line.startswith("event:"):
+                self._current_event = line[6:].lstrip()
+                continue
+
+            if line.startswith("data:"):
+                data_value = line[5:]
+                if data_value.startswith(" "):
+                    data_value = data_value[1:]
+                self._current_data.append(data_value)
+                continue
+
+            # Fallback: treat as data line (defensive)
+            self._current_data.append(line)
+
+        return events
+
+    def flush(self) -> List[_SSEEvent]:
+        """Flush any remaining buffered event (used at stream end)."""
+        events: List[_SSEEvent] = []
+        if self._current_event is not None or self._current_data:
+            data = "\n".join(self._current_data)
+            events.append(_SSEEvent(event=self._current_event, data=data))
+        if self._buffer:
+            events.append(_SSEEvent(event=None, data=self._buffer))
+        self._current_event = None
+        self._current_data = []
+        self._buffer = ""
+        return events
 
 # Reasoning effort to thinking budget mapping
 # Maps OpenAI's reasoning_effort levels to Anthropic's thinking budget_tokens
@@ -521,11 +600,12 @@ async def convert_anthropic_stream_to_openai(
     completion_id = f"chatcmpl-{int(time.time())}"
     created = int(time.time())
 
-    # Track content blocks
-    current_text = ""
-    tool_calls = []
-    tool_call_index = 0
+    parser = _SSEParser()
     converted_index = 0
+
+    # Track tool call state: map Anthropic block index -> OpenAI tool call metadata
+    tool_call_states: Dict[int, Dict[str, Any]] = {}
+    next_tool_index = 0
 
     if tracer:
         tracer.log_note("starting OpenAI stream conversion")
@@ -540,72 +620,32 @@ async def convert_anthropic_stream_to_openai(
         return chunk_str
 
     try:
+        stream_finished = False
         async for chunk in anthropic_stream:
-            # Parse SSE events
-            if not chunk.strip():
-                continue
+            for event in parser.feed(chunk):
+                event_name = (event.event or "").strip()
+                raw_data = event.data.strip()
 
-            # Split into lines
-            lines = chunk.strip().split('\n')
-            event_type = None
-            data = None
+                if not raw_data:
+                    continue
 
-            for line in lines:
-                if line.startswith('event:'):
-                    event_type = line.split(':', 1)[1].strip()
-                elif line.startswith('data:'):
-                    data_str = line.split(':', 1)[1].strip()
-                    try:
-                        data = json.loads(data_str)
-                    except json.JSONDecodeError:
-                        continue
+                # Skip keepalive pings early
+                if event_name == "ping":
+                    continue
 
-            if not data:
-                continue
+                try:
+                    data = json.loads(raw_data)
+                except json.JSONDecodeError:
+                    logger.warning(f"[{request_id}] Failed to decode SSE data: {raw_data}")
+                    continue
 
-            # Handle different event types
-            if event_type == "message_start":
-                # Send initial chunk
-                initial_chunk = {
-                    "id": completion_id,
-                    "object": "chat.completion.chunk",
-                    "created": created,
-                    "model": model,
-                    "choices": [
-                        {
-                            "index": 0,
-                            "delta": {"role": "assistant", "content": ""},
-                            "finish_reason": None
-                        }
-                    ]
-                }
-                yield emit(initial_chunk)
+                data_type = data.get("type") or event_name
 
-            elif event_type == "content_block_start":
-                # Check if it's a tool use block
-                content_block = data.get("content_block", {})
-                if content_block.get("type") == "tool_use":
-                    # Start a new tool call
-                    tool_calls.append({
-                        "index": tool_call_index,
-                        "id": content_block.get("id", ""),
-                        "type": "function",
-                        "function": {
-                            "name": content_block.get("name", ""),
-                            "arguments": ""
-                        }
-                    })
+                if data_type == "ping":
+                    continue
 
-            elif event_type == "content_block_delta":
-                delta = data.get("delta", {})
-                delta_type = delta.get("type")
-
-                if delta_type == "text_delta":
-                    # Text content delta
-                    text = delta.get("text", "")
-                    current_text += text
-
-                    delta_chunk = {
+                if data_type == "message_start":
+                    initial_chunk = {
                         "id": completion_id,
                         "object": "chat.completion.chunk",
                         "created": created,
@@ -613,18 +653,32 @@ async def convert_anthropic_stream_to_openai(
                         "choices": [
                             {
                                 "index": 0,
-                                "delta": {"content": text},
+                                "delta": {"role": "assistant", "content": ""},
                                 "finish_reason": None
                             }
                         ]
                     }
-                    yield emit(delta_chunk)
+                    yield emit(initial_chunk)
+                    continue
 
-                elif delta_type == "input_json_delta":
-                    # Tool use arguments delta
-                    if tool_calls:
-                        partial_json = delta.get("partial_json", "")
-                        tool_calls[-1]["function"]["arguments"] += partial_json
+                if data_type == "content_block_start":
+                    content_block = data.get("content_block", {}) or {}
+                    block_type = content_block.get("type")
+
+                    if block_type == "tool_use":
+                        sse_index = data.get("index")
+                        if sse_index is None:
+                            logger.warning(f"[{request_id}] Tool use block missing index: {data}")
+                            continue
+
+                        call_state = {
+                            "openai_index": next_tool_index,
+                            "id": content_block.get("id", ""),
+                            "name": content_block.get("name", ""),
+                            "arguments": ""
+                        }
+                        tool_call_states[sse_index] = call_state
+                        next_tool_index += 1
 
                         delta_chunk = {
                             "id": completion_id,
@@ -637,8 +691,76 @@ async def convert_anthropic_stream_to_openai(
                                     "delta": {
                                         "tool_calls": [
                                             {
-                                                "index": tool_calls[-1]["index"],
+                                                "index": call_state["openai_index"],
+                                                "id": call_state["id"],
+                                                "type": "function",
                                                 "function": {
+                                                    "name": call_state["name"],
+                                                    "arguments": ""
+                                                }
+                                            }
+                                        ]
+                                    },
+                                    "finish_reason": None
+                                }
+                            ]
+                        }
+                        yield emit(delta_chunk)
+                    continue
+
+                if data_type == "content_block_delta":
+                    delta = data.get("delta", {}) or {}
+                    delta_type = delta.get("type")
+
+                    if delta_type == "text_delta":
+                        text = delta.get("text", "")
+                        if text:
+                            delta_chunk = {
+                                "id": completion_id,
+                                "object": "chat.completion.chunk",
+                                "created": created,
+                                "model": model,
+                                "choices": [
+                                    {
+                                        "index": 0,
+                                        "delta": {"content": text},
+                                        "finish_reason": None
+                                    }
+                                ]
+                            }
+                            yield emit(delta_chunk)
+                        continue
+
+                    if delta_type == "input_json_delta":
+                        sse_index = data.get("index")
+                        if sse_index is None:
+                            logger.warning(f"[{request_id}] input_json_delta missing index: {data}")
+                            continue
+
+                        call_state = tool_call_states.get(sse_index)
+                        if not call_state:
+                            logger.warning(f"[{request_id}] input_json_delta for unknown tool index {sse_index}")
+                            continue
+
+                        partial_json = delta.get("partial_json", "")
+                        call_state["arguments"] += partial_json
+
+                        delta_chunk = {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model,
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {
+                                        "tool_calls": [
+                                            {
+                                                "index": call_state["openai_index"],
+                                                "id": call_state["id"],
+                                                "type": "function",
+                                                "function": {
+                                                    "name": call_state["name"],
                                                     "arguments": partial_json
                                                 }
                                             }
@@ -649,52 +771,51 @@ async def convert_anthropic_stream_to_openai(
                             ]
                         }
                         yield emit(delta_chunk)
+                        continue
 
-            elif event_type == "content_block_stop":
-                # Content block finished
-                if tool_calls:
-                    tool_call_index += 1
+                if data_type == "message_delta":
+                    delta = data.get("delta", {}) or {}
+                    stop_reason = delta.get("stop_reason")
 
-            elif event_type == "message_delta":
-                # Message finished
-                delta = data.get("delta", {})
-                stop_reason = delta.get("stop_reason")
+                    if stop_reason:
+                        finish_reason = map_stop_reason_to_finish_reason(stop_reason)
 
-                if stop_reason:
-                    finish_reason = map_stop_reason_to_finish_reason(stop_reason)
+                        final_chunk = {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model,
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {},
+                                    "finish_reason": finish_reason
+                                }
+                            ]
+                        }
+                        yield emit(final_chunk)
+                    continue
 
-                    final_chunk = {
-                        "id": completion_id,
-                        "object": "chat.completion.chunk",
-                        "created": created,
-                        "model": model,
-                        "choices": [
-                            {
-                                "index": 0,
-                                "delta": {},
-                                "finish_reason": finish_reason
-                            }
-                        ]
+                if data_type == "message_stop":
+                    if tracer:
+                        tracer.log_note("received message_stop event")
+                    stream_finished = True
+                    break
+
+                if data_type == "error":
+                    error_chunk = {
+                        "error": {
+                            "message": data.get("error", {}).get("message", "Unknown error"),
+                            "type": data.get("error", {}).get("type", "api_error")
+                        }
                     }
-                    yield emit(final_chunk)
+                    if tracer:
+                        tracer.log_error(f"anthropic error event: {error_chunk}")
+                    yield emit(error_chunk)
+                    stream_finished = True
+                    break
 
-            elif event_type == "message_stop":
-                # Stream complete
-                if tracer:
-                    tracer.log_note("received message_stop event")
-                break
-
-            elif event_type == "error":
-                # Error occurred
-                error_chunk = {
-                    "error": {
-                        "message": data.get("error", {}).get("message", "Unknown error"),
-                        "type": data.get("error", {}).get("type", "api_error")
-                    }
-                }
-                if tracer:
-                    tracer.log_error(f"anthropic error event: {error_chunk}")
-                yield emit(error_chunk)
+            if stream_finished:
                 break
 
     except Exception as e:
