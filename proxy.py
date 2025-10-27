@@ -31,6 +31,7 @@ from openai_compat import (
     convert_anthropic_response_to_openai,
     convert_anthropic_stream_to_openai
 )
+from constants import OPENAI_MODELS_LIST
 
 # Setup logging
 logging.basicConfig(level=getattr(logging, LOG_LEVEL.upper()))
@@ -472,68 +473,9 @@ async def health_check():
 @app.get("/v1/models")
 async def list_models():
     """OpenAI-compatible models endpoint with reasoning variants"""
-    # Current Claude models only (legacy models removed)
-    base_models = [
-        {
-            "id": "claude-sonnet-4-5-20250929",
-            "object": "model",
-            "created": 1727654400,  # Sept 29, 2025
-            "owned_by": "anthropic",
-            "context_length": 200000,
-            "max_completion_tokens": 65536
-        },
-        {
-            "id": "claude-haiku-4-5-20251001",
-            "object": "model",
-            "created": 1727827200,  # Oct 1, 2025
-            "owned_by": "anthropic",
-            "context_length": 200000,
-            "max_completion_tokens": 65536
-        },
-        {
-            "id": "claude-opus-4-1-20250805",
-            "object": "model",
-            "created": 1722816000,  # Aug 5, 2025
-            "owned_by": "anthropic",
-            "context_length": 200000,
-            "max_completion_tokens": 32768
-        },
-        {
-            "id": "claude-sonnet-4-20250514",
-            "object": "model",
-            "created": 1715644800,  # May 14, 2025
-            "owned_by": "anthropic",
-            "context_length": 200000,
-            "max_completion_tokens": 65536
-        }
-    ]
-
-    # Generate models list with reasoning variants
-    models = []
-
-    # Reasoning budget mapping
-    reasoning_budgets = {
-        "low": 8000,
-        "medium": 16000,
-        "high": 32000
-    }
-
-    for base_model in base_models:
-        # Add base model (no reasoning)
-        models.append(base_model)
-
-        # Add reasoning variants for each level
-        for level, budget in reasoning_budgets.items():
-            reasoning_model = base_model.copy()
-            reasoning_model["id"] = f"{base_model['id']}-reasoning-{level}"
-            # Add metadata for reasoning variants
-            reasoning_model["reasoning_capable"] = True
-            reasoning_model["reasoning_budget"] = budget
-            models.append(reasoning_model)
-
     return {
         "object": "list",
-        "data": models
+        "data": [model.copy() for model in OPENAI_MODELS_LIST]
     }
 
 

@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from typing import Dict, Any, List, Optional, AsyncIterator, Tuple, TYPE_CHECKING
 import logging
 
+from constants import REASONING_BUDGET_MAP, resolve_model_metadata
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -91,60 +93,6 @@ class _SSEParser:
         self._current_data = []
         self._buffer = ""
         return events
-
-# Reasoning effort to thinking budget mapping
-# Maps OpenAI's reasoning_effort levels to Anthropic's thinking budget_tokens
-REASONING_BUDGET_MAP = {
-    "low": 8000,
-    "medium": 16000,
-    "high": 32000
-}
-
-
-def parse_reasoning_model(model_name: str) -> Tuple[str, Optional[str], bool]:
-    """
-    Parse model name to extract base model, reasoning level, and 1M context flag.
-
-    Args:
-        model_name: Model name, potentially with -1m and/or -reasoning-{level} suffixes
-
-    Returns:
-        tuple: (base_model_name, reasoning_level, use_1m_context)
-            - base_model_name: Model name without -1m or -reasoning suffixes
-            - reasoning_level: "low", "medium", "high", or None
-            - use_1m_context: True if -1m variant is used
-
-    Examples:
-        "claude-sonnet-4-20250514" -> ("claude-sonnet-4-20250514", None, False)
-        "claude-sonnet-4-20250514-reasoning-high" -> ("claude-sonnet-4-20250514", "high", False)
-        "claude-sonnet-4-20250514-1m" -> ("claude-sonnet-4-20250514", None, True)
-        "claude-sonnet-4-20250514-1m-reasoning-high" -> ("claude-sonnet-4-20250514", "high", True)
-    """
-    use_1m_context = False
-    reasoning_level = None
-    base_model = model_name
-
-    # Check for -1m variant
-    if "-1m" in model_name:
-        use_1m_context = True
-        # Remove -1m from the model name
-        base_model = model_name.replace("-1m", "")
-        logger.debug(f"Detected 1M context variant: {model_name} -> {base_model}")
-
-    # Check for -reasoning-{level} variant
-    if "-reasoning-" in base_model:
-        parts = base_model.rsplit("-reasoning-", 1)
-        base_model = parts[0]
-        reasoning_level = parts[1] if len(parts) > 1 else None
-
-        # Validate reasoning level
-        if reasoning_level and reasoning_level in REASONING_BUDGET_MAP:
-            logger.debug(f"Detected reasoning variant: level={reasoning_level}")
-        else:
-            logger.warning(f"Invalid reasoning level in model name: {reasoning_level}. Valid values: {list(REASONING_BUDGET_MAP.keys())}")
-            reasoning_level = None
-
-    return base_model, reasoning_level, use_1m_context
 
 
 def convert_openai_messages_to_anthropic(openai_messages: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], Optional[str]]:
@@ -440,7 +388,7 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
 
     # Parse model name for reasoning and 1M context variants
     model_name = openai_request.get("model", "claude-sonnet-4-5-20250929")
-    base_model, model_reasoning_level, use_1m_context = parse_reasoning_model(model_name)
+    base_model, model_reasoning_level, use_1m_context = resolve_model_metadata(model_name)
 
     # Build Anthropic request (use base model name, without variant suffixes)
     anthropic_request = {
