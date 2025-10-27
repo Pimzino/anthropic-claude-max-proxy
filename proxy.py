@@ -285,6 +285,9 @@ async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token
     # Core required beta header for OAuth authentication
     required_betas = ["oauth-2025-04-20"]
 
+    if not anthropic_request.get("system"):
+        anthropic_request = inject_claude_code_system_message(anthropic_request)
+
     # Check for 1M context variant (custom metadata field set by model parsing)
     use_1m_context = anthropic_request.pop("_use_1m_context", False)
     if use_1m_context:
@@ -346,6 +349,9 @@ async def stream_anthropic_response(
     """Stream response from Anthropic API"""
     # Core required beta header for OAuth authentication
     required_betas = ["oauth-2025-04-20"]
+
+    if not anthropic_request.get("system"):
+        anthropic_request = inject_claude_code_system_message(anthropic_request)
 
     # Check for 1M context variant (custom metadata field set by model parsing)
     use_1m_context = anthropic_request.pop("_use_1m_context", False)
