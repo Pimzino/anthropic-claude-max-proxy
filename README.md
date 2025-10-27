@@ -35,8 +35,8 @@ This proxy is aligned with the [OpenCode](https://github.com/anthropics/opencode
 
 **Note:** The `oauth-2025-04-20` beta is NOT included in message requests. It's only for OAuth token endpoints and gates features not available to all Max users (like long context beta).
 
-**OAuth Flow (matches OpenCode):**
-1. User authorizes via `https://claude.ai/oauth/authorize`
+**OAuth Flow (matches OpenCode "Create an API Key" mode):**
+1. User authorizes via `https://console.anthropic.com/oauth/authorize`
 2. Authorization code exchanged at `https://console.anthropic.com/v1/oauth/token`
 3. **OAuth token used to create permanent API key** at `https://api.anthropic.com/api/oauth/claude_cli/create_api_key`
 4. API key used for all message requests (no expiration, no feature gating)

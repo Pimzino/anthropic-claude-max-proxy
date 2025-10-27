@@ -21,6 +21,7 @@ API_BASE = "https://api.anthropic.com"
 REQUEST_TIMEOUT = config.get("REQUEST_TIMEOUT", "api.request_timeout", 120.0)
 
 # OAuth configuration (hardcoded - not user configurable)
+# Using claude.ai for authorization, console.anthropic.com for token exchange
 AUTH_BASE_AUTHORIZE = "https://claude.ai"
 AUTH_BASE_TOKEN = "https://console.anthropic.com"
 CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
