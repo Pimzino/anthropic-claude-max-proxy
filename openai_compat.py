@@ -308,6 +308,22 @@ def convert_openai_content_to_anthropic(openai_content: List[Dict[str, Any]]) ->
 
             anthropic_content.append(tool_result_block)
 
+        elif item_type == "tool_use":
+            # Cursor sometimes sends Anthropic-style tool_use blocks directly
+            tool_use_block = {
+                "type": "tool_use",
+                "id": item.get("id", ""),
+                "name": item.get("name", ""),
+                "input": item.get("input", {})
+            }
+
+            # Preserve any additional fields if present (e.g., cache_control)
+            for key, value in item.items():
+                if key not in tool_use_block:
+                    tool_use_block[key] = value
+
+            anthropic_content.append(tool_use_block)
+
         elif item_type == "image_url":
             # Convert OpenAI image_url to Anthropic image format
             image_url = item.get("image_url", {})
