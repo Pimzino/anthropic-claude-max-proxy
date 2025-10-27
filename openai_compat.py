@@ -305,6 +305,43 @@ def convert_openai_content_to_anthropic(openai_content: List[Dict[str, Any]]) ->
     return anthropic_content
 
 
+def _ensure_thinking_prefix(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Ensure every assistant message begins with a thinking block when reasoning is enabled."""
+    updated_messages: List[Dict[str, Any]] = []
+
+    for message in messages:
+        if message.get("role") != "assistant":
+            updated_messages.append(message)
+            continue
+
+        new_message = message.copy()
+        content = new_message.get("content")
+
+        if isinstance(content, str):
+            blocks: List[Dict[str, Any]] = []
+            blocks.append({"type": "thinking", "text": ""})
+            if content:
+                blocks.append({"type": "text", "text": content})
+            new_message["content"] = blocks
+        elif isinstance(content, list):
+            if content and isinstance(content[0], dict) and content[0].get("type") in ("thinking", "redacted_thinking"):
+                new_message["content"] = content
+            else:
+                new_content: List[Dict[str, Any]] = [{"type": "thinking", "text": ""}]
+                for block in content:
+                    new_content.append(block)
+                new_message["content"] = new_content
+        elif isinstance(content, dict):
+            # Rare case: single dict, wrap it
+            new_message["content"] = [{"type": "thinking", "text": ""}, content]
+        else:
+            new_message["content"] = [{"type": "thinking", "text": ""}]
+
+        updated_messages.append(new_message)
+
+    return updated_messages
+
+
 def convert_openai_tool_calls_to_anthropic(tool_calls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Convert OpenAI tool_calls to Anthropic tool_use content blocks."""
     anthropic_content = []
@@ -488,6 +525,7 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
     # Enable thinking if reasoning level is specified
     if reasoning_level and reasoning_level in REASONING_BUDGET_MAP:
         thinking_budget = REASONING_BUDGET_MAP[reasoning_level]
+        anthropic_request["messages"] = _ensure_thinking_prefix(anthropic_request["messages"])
         anthropic_request["thinking"] = {
             "type": "enabled",
             "budget_tokens": thinking_budget
@@ -635,6 +673,7 @@ async def convert_anthropic_stream_to_openai(
     # Track tool call state: map Anthropic block index -> OpenAI tool call metadata
     tool_call_states: Dict[int, Dict[str, Any]] = {}
     next_tool_index = 0
+    thinking_states: Dict[int, Dict[str, Any]] = {}
 
     if tracer:
         tracer.log_note("starting OpenAI stream conversion")
@@ -647,6 +686,31 @@ async def convert_anthropic_stream_to_openai(
             tracer.log_note(f"emitting OpenAI chunk #{converted_index}")
             tracer.log_converted_chunk(chunk_str)
         return chunk_str
+
+    def emit_reasoning(text: str) -> str:
+        payload = {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "reasoning": {
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": text
+                                }
+                            ]
+                        }
+                    },
+                    "finish_reason": None
+                }
+            ]
+        }
+        return emit(payload)
 
     try:
         stream_finished = False
@@ -735,7 +799,15 @@ async def convert_anthropic_stream_to_openai(
                             ]
                         }
                         yield emit(delta_chunk)
-                    continue
+                        continue
+
+                    if block_type in ("thinking", "redacted_thinking"):
+                        sse_index = data.get("index")
+                        if sse_index is not None:
+                            thinking_states[sse_index] = {
+                                "type": block_type
+                            }
+                        continue
 
                 if data_type == "content_block_delta":
                     delta = data.get("delta", {}) or {}
@@ -801,6 +873,30 @@ async def convert_anthropic_stream_to_openai(
                         }
                         yield emit(delta_chunk)
                         continue
+
+                    if delta_type in ("thinking_delta", "redacted_thinking_delta"):
+                        sse_index = data.get("index")
+                        if sse_index is None:
+                            logger.debug(f"[{request_id}] thinking delta missing index: {data}")
+                            continue
+                        if sse_index not in thinking_states:
+                            thinking_states[sse_index] = {"type": delta_type}
+                        reasoning_text = (
+                            delta.get("text")
+                            or delta.get("thinking")
+                            or delta.get("partial_text")
+                            or ""
+                        )
+                        if reasoning_text:
+                            yield emit_reasoning(reasoning_text)
+                        continue
+
+                if data_type == "content_block_stop":
+                    sse_index = data.get("index")
+                    if sse_index is not None:
+                        tool_call_states.pop(sse_index, None)
+                        thinking_states.pop(sse_index, None)
+                    continue
 
                 if data_type == "message_delta":
                     delta = data.get("delta", {}) or {}
