@@ -286,15 +286,12 @@ async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token
         required_betas.append("interleaved-thinking-2025-05-14")
         logger.debug("Adding interleaved-thinking beta (thinking enabled)")
 
-    # Merge client beta headers if provided (allows AI agents to request specific betas)
+    # IGNORE client beta headers - they may request tier-4-only features
+    # We control beta headers based on request features, not client requests
     if client_beta_headers:
-        client_betas = [beta.strip() for beta in client_beta_headers.split(",")]
-        # Combine and deduplicate
-        all_betas = list(dict.fromkeys(required_betas + client_betas))
-    else:
-        all_betas = required_betas
+        logger.debug(f"Ignoring client beta headers (not supported): {client_beta_headers}")
 
-    beta_header_value = ",".join(all_betas)
+    beta_header_value = ",".join(required_betas)
     logger.debug(f"Final beta headers: {beta_header_value}")
 
     headers = {
@@ -345,15 +342,12 @@ async def stream_anthropic_response(request_id: str, anthropic_request: Dict[str
         required_betas.append("interleaved-thinking-2025-05-14")
         logger.debug(f"[{request_id}] Adding interleaved-thinking beta (thinking enabled)")
 
-    # Merge client beta headers if provided (allows AI agents to request specific betas)
+    # IGNORE client beta headers - they may request tier-4-only features
+    # We control beta headers based on request features, not client requests
     if client_beta_headers:
-        client_betas = [beta.strip() for beta in client_beta_headers.split(",")]
-        # Combine and deduplicate
-        all_betas = list(dict.fromkeys(required_betas + client_betas))
-    else:
-        all_betas = required_betas
+        logger.debug(f"[{request_id}] Ignoring client beta headers (not supported): {client_beta_headers}")
 
-    beta_header_value = ",".join(all_betas)
+    beta_header_value = ",".join(required_betas)
     logger.debug(f"[{request_id}] Final beta headers: {beta_header_value}")
 
     headers = {
