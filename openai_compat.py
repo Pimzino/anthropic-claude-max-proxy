@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Optional, AsyncIterator, Tuple, TYPE_CHECKIN
 import logging
 
 from constants import REASONING_BUDGET_MAP, resolve_model_metadata
+from thinking_cache import THINKING_CACHE
 
 logger = logging.getLogger(__name__)
 
@@ -541,6 +542,45 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
                     "name": function_name
                 }
 
+    # Before enabling thinking, try to prepend a previously signed thinking
+    # block to the last assistant message when tools are present.
+    def _maybe_prepend_signed_thinking_for_tools() -> None:
+        msgs = anthropic_request.get("messages") or []
+        if not msgs:
+            return
+        # find last assistant message
+        last_idx = None
+        for i in range(len(msgs) - 1, -1, -1):
+            if msgs[i].get("role") == "assistant":
+                last_idx = i
+                break
+        if last_idx is None:
+            return
+        last_msg = msgs[last_idx]
+        content = last_msg.get("content")
+        if not isinstance(content, list) or not content:
+            return
+        first = content[0]
+        if isinstance(first, dict) and first.get("type") in ("thinking", "redacted_thinking"):
+            return
+        # collect tool_use ids
+        tool_ids = [b.get("id") for b in content if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("id")]
+        if not tool_ids:
+            return
+        cached = None
+        for tid in tool_ids:
+            block = THINKING_CACHE.get(tid)
+            if block and block.get("signature") is not None:
+                cached = block
+                break
+        if cached:
+            logger.debug("Reattaching signed thinking block for tool_use id(s) %s", tool_ids)
+            last_msg["content"] = [cached] + content
+            msgs[last_idx] = last_msg
+            anthropic_request["messages"] = msgs
+
+    _maybe_prepend_signed_thinking_for_tools()
+
     # Handle reasoning/thinking
     # Priority: reasoning_effort parameter > model variant > no thinking
     reasoning_level = None
@@ -758,6 +798,11 @@ async def convert_anthropic_stream_to_openai(
         }
         return emit(payload)
 
+    # Capture signed thinking + tool_use ids for potential reattachment
+    current_tool_use_ids: List[str] = []
+    # Map content_block index -> accumulator {thinking: str, signature: str | None}
+    current_thinking_blocks: Dict[int, Dict[str, Any]] = {}
+
     try:
         stream_finished = False
         async for chunk in anthropic_stream:
@@ -845,6 +890,10 @@ async def convert_anthropic_stream_to_openai(
                             ]
                         }
                         yield emit(delta_chunk)
+                        # Track tool_use ids for this assistant message
+                        tool_id = content_block.get("id")
+                        if tool_id:
+                            current_tool_use_ids.append(tool_id)
                         continue
 
                     if block_type in ("thinking", "redacted_thinking"):
@@ -852,6 +901,12 @@ async def convert_anthropic_stream_to_openai(
                         if sse_index is not None:
                             thinking_states[sse_index] = {
                                 "type": block_type
+                            }
+                            # Initialize accumulator for this thinking block (capture signature if present)
+                            signature = content_block.get("signature")
+                            current_thinking_blocks[sse_index] = {
+                                "thinking": "",
+                                "signature": signature,
                             }
                         continue
 
@@ -935,6 +990,10 @@ async def convert_anthropic_stream_to_openai(
                         )
                         if reasoning_text:
                             yield emit_reasoning(reasoning_text)
+                            # Accumulate full thinking text for later reattachment
+                            acc = current_thinking_blocks.get(sse_index)
+                            if acc is not None:
+                                acc["thinking"] = (acc.get("thinking", "") + reasoning_text)
                         continue
 
                 if data_type == "content_block_stop":
@@ -943,6 +1002,22 @@ async def convert_anthropic_stream_to_openai(
                         tool_call_states.pop(sse_index, None)
                         thinking_states.pop(sse_index, None)
                     continue
+
+                if data_type == "message_stop":
+                    # On assistant message completion, persist signed thinking (if available) keyed by tool ids
+                    # so we can reattach on the next request.
+                    # Use the first thinking block captured.
+                    saved_block = None
+                    for acc in current_thinking_blocks.values():
+                        if acc.get("thinking") and acc.get("signature") is not None:
+                            saved_block = {"type": "thinking", "thinking": acc["thinking"], "signature": acc["signature"]}
+                            break
+                    if saved_block and current_tool_use_ids:
+                        for tid in current_tool_use_ids:
+                            THINKING_CACHE.put(tid, saved_block)
+                    # Reset accumulators for safety in case of continued streaming
+                    current_tool_use_ids.clear()
+                    current_thinking_blocks.clear()
 
                 if data_type == "message_delta":
                     delta = data.get("delta", {}) or {}
