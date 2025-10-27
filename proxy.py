@@ -226,6 +226,52 @@ def inject_claude_code_system_message(request_data: Dict[str, Any]) -> Dict[str,
     return modified_request
 
 
+def strip_cache_control_from_messages(request_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Strip cache_control from user/assistant message content blocks.
+
+    cache_control on message content requires context-1m-2025-08-07 beta (long context),
+    which is not available to all Max subscriptions. System messages can keep cache_control.
+    """
+    modified_request = request_data.copy()
+
+    if 'messages' not in modified_request:
+        return modified_request
+
+    modified_messages = []
+    stripped_count = 0
+
+    for message in modified_request['messages']:
+        modified_message = message.copy()
+
+        # Only process user and assistant messages (not system)
+        if message.get('role') in ['user', 'assistant']:
+            content = modified_message.get('content')
+
+            if isinstance(content, list):
+                # Content is an array of blocks - strip cache_control from each
+                modified_content = []
+                for block in content:
+                    if isinstance(block, dict):
+                        modified_block = block.copy()
+                        if 'cache_control' in modified_block:
+                            del modified_block['cache_control']
+                            stripped_count += 1
+                        modified_content.append(modified_block)
+                    else:
+                        modified_content.append(block)
+                modified_message['content'] = modified_content
+
+        modified_messages.append(modified_message)
+
+    modified_request['messages'] = modified_messages
+
+    if stripped_count > 0:
+        logger.debug(f"Stripped cache_control from {stripped_count} message content blocks (long context beta not available)")
+
+    return modified_request
+
+
 async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token: str, client_beta_headers: Optional[str] = None) -> httpx.Response:
     """Make a request to Anthropic API"""
     # Required beta headers for authentication flow
@@ -475,6 +521,9 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
     # Inject Claude Code system message to bypass authentication detection
     anthropic_request = inject_claude_code_system_message(anthropic_request)
 
+    # Strip cache_control from message content blocks (requires long context beta)
+    anthropic_request = strip_cache_control_from_messages(anthropic_request)
+
     # Extract client beta headers
     client_beta_headers = headers_dict.get("anthropic-beta")
 
@@ -580,6 +629,9 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
 
         # Inject Claude Code system message to bypass authentication detection
         anthropic_request = inject_claude_code_system_message(anthropic_request)
+
+        # Strip cache_control from message content blocks (requires long context beta)
+        anthropic_request = strip_cache_control_from_messages(anthropic_request)
 
         # Extract client beta headers
         headers_dict = dict(raw_request.headers)
