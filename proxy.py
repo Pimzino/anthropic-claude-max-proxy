@@ -196,10 +196,10 @@ def inject_claude_code_system_message(request_data: Dict[str, Any]) -> Dict[str,
     modified_request = request_data.copy()
 
     # The exact spoof message from Claude Code - must be first system message
+    # NOTE: cache_control removed - requires long context beta not available to all Max users
     claude_code_spoof_element = {
         "type": "text",
-        "text": "You are Claude Code, Anthropic's official CLI for Claude.",
-        "cache_control": {"type": "ephemeral"}
+        "text": "You are Claude Code, Anthropic's official CLI for Claude."
     }
 
     # Claude Code uses array format for system messages
@@ -210,11 +210,10 @@ def inject_claude_code_system_message(request_data: Dict[str, Any]) -> Dict[str,
         if isinstance(existing_system, list):
             modified_request['system'] = [claude_code_spoof_element] + existing_system
         else:
-            # Convert string system to array format with cache control
+            # Convert string system to array format (no cache control - requires long context beta)
             existing_system_element = {
                 "type": "text",
-                "text": existing_system,
-                "cache_control": {"type": "ephemeral"}
+                "text": existing_system
             }
             modified_request['system'] = [claude_code_spoof_element, existing_system_element]
     else:
