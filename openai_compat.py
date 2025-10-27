@@ -211,7 +211,13 @@ def convert_openai_tools_to_anthropic(openai_tools: Optional[List[Dict[str, Any]
     anthropic_tools = []
 
     for tool in openai_tools:
-        if tool.get("type") == "function":
+        # Check if it's already in Anthropic format (Cursor sends this)
+        if "name" in tool and "description" in tool and "type" not in tool:
+            # Already Anthropic format, pass through
+            anthropic_tools.append(tool)
+            logger.debug(f"Tool already in Anthropic format: {tool.get('name')}")
+        elif tool.get("type") == "function":
+            # Standard OpenAI format
             function = tool.get("function", {})
             anthropic_tools.append({
                 "name": function.get("name", ""),
@@ -304,14 +310,20 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
         elif tool_choice == "auto":
             # Default Anthropic behavior
             pass
-        elif isinstance(tool_choice, dict) and tool_choice.get("type") == "function":
-            # Specific tool
-            function_name = tool_choice.get("function", {}).get("name")
-            if function_name:
-                anthropic_request["tool_choice"] = {
-                    "type": "tool",
-                    "name": function_name
-                }
+        elif isinstance(tool_choice, dict):
+            # Handle dict format (Cursor sends {'type': 'auto'})
+            choice_type = tool_choice.get("type")
+            if choice_type == "auto" or choice_type is None:
+                # Auto mode - default Anthropic behavior
+                pass
+            elif choice_type == "function":
+                # Specific tool
+                function_name = tool_choice.get("function", {}).get("name")
+                if function_name:
+                    anthropic_request["tool_choice"] = {
+                        "type": "tool",
+                        "name": function_name
+                    }
 
     # Handle function_call (legacy)
     if "function_call" in openai_request:
