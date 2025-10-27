@@ -192,36 +192,35 @@ def sanitize_anthropic_request(request_data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def inject_claude_code_system_message(request_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Inject Claude Code system message to bypass authentication detection (matches real Claude Code format)"""
+    """Inject Claude Code system message to bypass authentication detection"""
     modified_request = request_data.copy()
 
-    # The exact spoof message from Claude Code - must be first system message
-    # NOTE: cache_control removed - requires long context beta not available to all Max users
-    claude_code_spoof_element = {
-        "type": "text",
-        "text": "You are Claude Code, Anthropic's official CLI for Claude."
-    }
+    # The exact spoof message from Claude Code - must be first
+    claude_code_spoof = "You are Claude Code, Anthropic's official CLI for Claude."
 
-    # Claude Code uses array format for system messages
+    # Use simple string format (array format requires long context beta)
     if 'system' in modified_request and modified_request['system']:
         existing_system = modified_request['system']
 
-        # If existing system is already an array, prepend our spoof
+        # Convert array format to string by extracting text
         if isinstance(existing_system, list):
-            modified_request['system'] = [claude_code_spoof_element] + existing_system
+            # Extract text from all array elements and join
+            system_texts = []
+            for element in existing_system:
+                if isinstance(element, dict) and 'text' in element:
+                    system_texts.append(element['text'])
+                elif isinstance(element, str):
+                    system_texts.append(element)
+            existing_text = "\n\n".join(system_texts)
+            modified_request['system'] = f"{claude_code_spoof}\n\n{existing_text}"
         else:
-            # Convert string system to array format (no cache control - requires long context beta)
-            existing_system_element = {
-                "type": "text",
-                "text": existing_system
-            }
-            modified_request['system'] = [claude_code_spoof_element, existing_system_element]
+            # Already a string, just prepend
+            modified_request['system'] = f"{claude_code_spoof}\n\n{existing_system}"
     else:
-        # No existing system message - create array with just the spoof
-        modified_request['system'] = [claude_code_spoof_element]
+        # No existing system message - create simple string
+        modified_request['system'] = claude_code_spoof
 
-    logger.debug(f"Injected Claude Code system message array for Anthropic authentication bypass")
-    logger.debug(f"Final system message array length: {len(modified_request.get('system', []))}")
+    logger.debug(f"Injected Claude Code system message (string format) for Anthropic authentication bypass")
     return modified_request
 
 
