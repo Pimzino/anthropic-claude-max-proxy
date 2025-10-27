@@ -208,6 +208,38 @@ def convert_openai_messages_to_anthropic(openai_messages: List[Dict[str, Any]]) 
     return anthropic_messages, system_text
 
 
+def _conversation_contains_tools(messages: List[Dict[str, Any]]) -> bool:
+    """Return True if any assistant has tool_use or any user has tool_result blocks."""
+    for msg in messages:
+        role = msg.get("role")
+        content = msg.get("content")
+        if isinstance(content, list):
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get("type")
+                if role == "assistant" and btype == "tool_use":
+                    return True
+                if role == "user" and btype == "tool_result":
+                    return True
+    return False
+
+
+def _last_assistant_starts_with_thinking(messages: List[Dict[str, Any]]) -> bool:
+    """Check if the last assistant message begins with a thinking/redacted_thinking block."""
+    for msg in reversed(messages):
+        if msg.get("role") != "assistant":
+            continue
+        content = msg.get("content")
+        if isinstance(content, list) and content:
+            first = content[0]
+            if isinstance(first, dict) and first.get("type") in ("thinking", "redacted_thinking"):
+                return True
+        # Found last assistant but doesn't start with thinking
+        return False
+    return False
+
+
 def convert_openai_content_to_anthropic(openai_content: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Convert OpenAI content array to Anthropic content blocks."""
     anthropic_content = []
@@ -525,29 +557,42 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
     # Enable thinking if reasoning level is specified
     if reasoning_level and reasoning_level in REASONING_BUDGET_MAP:
         thinking_budget = REASONING_BUDGET_MAP[reasoning_level]
-        # Do NOT inject a thinking content block into messages; Anthropic expects
-        # thinking blocks to be model-generated and signed. Use top-level parameter only.
-        anthropic_request["thinking"] = {
-            "type": "enabled",
-            "budget_tokens": thinking_budget
-        }
+
+        # If the conversation includes tool use but the last assistant message
+        # does not begin with a signed thinking block, Anthropic will reject the
+        # request. In that case, fall back to disabling thinking for this call.
+        tools_in_history = _conversation_contains_tools(anthropic_request["messages"]) if anthropic_request.get("messages") else False
+        last_assistant_has_thinking = _last_assistant_starts_with_thinking(anthropic_request["messages"]) if anthropic_request.get("messages") else False
+
+        if tools_in_history and not last_assistant_has_thinking:
+            logger.warning(
+                "Thinking requested but missing signed thinking block on last assistant with tools; "
+                "disabling thinking for this request to satisfy Anthropic requirements."
+            )
+        else:
+            # Safe to enable thinking
+            anthropic_request["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": thinking_budget
+            }
 
         # Ensure max_tokens is sufficient for thinking + response
         # Reserve at least 1024 tokens for the actual response content
         min_response_tokens = 1024
         required_total = thinking_budget + min_response_tokens
 
-        if anthropic_request["max_tokens"] < required_total:
+        if anthropic_request.get("thinking") and anthropic_request["max_tokens"] < required_total:
             logger.warning(
                 f"Increasing max_tokens from {anthropic_request['max_tokens']} to {required_total} "
                 f"(thinking: {thinking_budget} + response: {min_response_tokens}) for reasoning level '{reasoning_level}'"
             )
             anthropic_request["max_tokens"] = required_total
 
-        logger.debug(
-            f"Enabled thinking with budget {thinking_budget} tokens (reasoning_effort: {reasoning_level}), "
-            f"max_tokens: {anthropic_request['max_tokens']}"
-        )
+        if anthropic_request.get("thinking"):
+            logger.debug(
+                f"Enabled thinking with budget {thinking_budget} tokens (reasoning_effort: {reasoning_level}), "
+                f"max_tokens: {anthropic_request['max_tokens']}"
+            )
 
     return anthropic_request
 
