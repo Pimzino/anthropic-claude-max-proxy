@@ -630,6 +630,12 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
     logger.info(f"[{request_id}] ===== NEW OPENAI CHAT COMPLETION REQUEST =====")
     logger.debug(f"[{request_id}] OpenAI Request: {request.model_dump()}")
 
+    # Log HTTP headers to see if client is sending anthropic-beta
+    headers_dict = dict(raw_request.headers)
+    if "anthropic-beta" in headers_dict:
+        logger.warning(f"[{request_id}] Client sent anthropic-beta header: {headers_dict['anthropic-beta']}")
+    logger.debug(f"[{request_id}] All HTTP headers from client: {dict(raw_request.headers)}")
+
     # Get valid access token with automatic refresh
     access_token = await oauth_manager.get_valid_token_async()
     if not access_token:
@@ -655,8 +661,7 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
 
         logger.debug(f"[{request_id}] Final Anthropic request (after stripping): {json.dumps(anthropic_request, indent=2)}")
 
-        # Extract client beta headers
-        headers_dict = dict(raw_request.headers)
+        # Extract client beta headers (headers_dict already created at top of function)
         client_beta_headers = headers_dict.get("anthropic-beta")
 
         if request.stream:
