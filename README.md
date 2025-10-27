@@ -42,9 +42,8 @@ This proxy is aligned with the [OpenCode](https://github.com/anthropics/opencode
 4. OAuth access token used with Bearer authorization for all requests
 
 **Authentication:**
-- Max/Pro users: OAuth Bearer tokens (obtained via OAuth flow above)
-- Console API users: API keys via `x-api-key` header (if you have a direct API key)
-- The proxy auto-detects the token type and uses the appropriate header
+- Uses OAuth Bearer tokens with `authorization: Bearer <token>` header
+- All requests authenticated via OAuth access tokens from the flow above
 
 **Cache Control:**
 - Automatic ephemeral cache control on system messages

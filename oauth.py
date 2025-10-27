@@ -86,40 +86,6 @@ class OAuthManager:
 
         return auth_url
 
-    async def create_api_key(self, access_token: str) -> Optional[str]:
-        """Create an API key from OAuth access token (matches OpenCode implementation)"""
-        import logging
-        logger = logging.getLogger(__name__)
-
-        logger.info("Creating API key from OAuth token...")
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(
-                    "https://api.anthropic.com/api/oauth/claude_cli/create_api_key",
-                    headers={
-                        "Content-Type": "application/json",
-                        "authorization": f"Bearer {access_token}"
-                    }
-                )
-
-                if response.status_code != 200:
-                    logger.error(f"API key creation failed with status {response.status_code}: {response.text}")
-                    return None
-
-                api_key_data = response.json()
-                api_key = api_key_data.get("raw_key")
-
-                if api_key:
-                    logger.info("Successfully created API key from OAuth token")
-                    return api_key
-                else:
-                    logger.error(f"API key not found in response: {api_key_data}")
-                    return None
-
-            except Exception as e:
-                logger.error(f"API key creation failed with exception: {e}")
-                return None
-
     async def exchange_code(self, code: str) -> Dict[str, Any]:
         """Exchange authorization code for tokens (plan.md section 3.4)"""
         import logging

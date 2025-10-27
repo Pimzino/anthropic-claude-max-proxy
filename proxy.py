@@ -241,9 +241,6 @@ async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token
 
     beta_header_value = ",".join(all_betas)
 
-    # Determine if using API key (starts with sk-ant-) or OAuth token
-    is_api_key = access_token.startswith("sk-ant-")
-
     headers = {
         "host": "api.anthropic.com",
         "Accept": "application/json",
@@ -256,6 +253,7 @@ async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token
         "X-Stainless-Runtime": "node",
         "X-Stainless-Runtime-Version": "v22.19.0",
         "anthropic-dangerous-direct-browser-access": "true",
+        "authorization": f"Bearer {access_token}",
         "anthropic-version": "2023-06-01",
         "x-app": "cli",
         "User-Agent": "claude-cli/1.0.113 (external, cli)",
@@ -265,12 +263,6 @@ async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token
         "accept-language": "*",
         "sec-fetch-mode": "cors"
     }
-
-    # Use appropriate auth header
-    if is_api_key:
-        headers["x-api-key"] = access_token
-    else:
-        headers["authorization"] = f"Bearer {access_token}"
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=30.0)) as client:
         response = await client.post(
@@ -296,9 +288,6 @@ async def stream_anthropic_response(request_id: str, anthropic_request: Dict[str
 
     beta_header_value = ",".join(all_betas)
 
-    # Determine if using API key (starts with sk-ant-) or OAuth token
-    is_api_key = access_token.startswith("sk-ant-")
-
     headers = {
         "host": "api.anthropic.com",
         "Accept": "application/json",
@@ -311,6 +300,7 @@ async def stream_anthropic_response(request_id: str, anthropic_request: Dict[str
         "X-Stainless-Runtime": "node",
         "X-Stainless-Runtime-Version": "v22.19.0",
         "anthropic-dangerous-direct-browser-access": "true",
+        "authorization": f"Bearer {access_token}",
         "anthropic-version": "2023-06-01",
         "x-app": "cli",
         "User-Agent": "claude-cli/1.0.113 (external, cli)",
@@ -320,12 +310,6 @@ async def stream_anthropic_response(request_id: str, anthropic_request: Dict[str
         "accept-language": "*",
         "sec-fetch-mode": "cors"
     }
-
-    # Use appropriate auth header
-    if is_api_key:
-        headers["x-api-key"] = access_token
-    else:
-        headers["authorization"] = f"Bearer {access_token}"
 
     async with httpx.AsyncClient(timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=30.0)) as client:
         async with client.stream(
