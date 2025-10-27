@@ -29,10 +29,9 @@ This proxy is aligned with the [OpenCode](https://github.com/anthropics/opencode
 - Uses header-based beta features
 
 **Beta Features (Messages API):**
-- `claude-code-20250219` - Claude Code integration
-- `oauth-2025-04-20` - OAuth authentication support (required for Bearer tokens)
-- `interleaved-thinking-2025-05-14` - Extended thinking support
-- `fine-grained-tool-streaming-2025-05-14` - Tool streaming support
+- `oauth-2025-04-20` - OAuth authentication support (always included, required for Bearer tokens)
+- `context-1m-2025-08-07` - 1M context window (conditionally added when using `-1m` model variants, requires tier 4)
+- `interleaved-thinking-2025-05-14` - Extended thinking support (conditionally added when thinking is enabled)
 
 **OAuth Flow (Max/Pro authentication):**
 1. User authorizes via `https://claude.ai/oauth/authorize` (with `code=true` parameter)
@@ -163,6 +162,34 @@ Available reasoning model variants:
 - `{model-name}-reasoning-high` (32k thinking budget)
 
 **Note:** If both `reasoning_effort` parameter and reasoning model variant are specified, the parameter takes precedence.
+
+## 1M Context Window Support
+
+The proxy supports 1-million token context window through model name variants. **Note:** 1M context requires **tier 4** subscription or custom rate limits.
+
+### Using 1M Context Model Variants
+
+Add `-1m` to any model name to enable 1M context:
+
+```python
+# Standard 200K context
+model="claude-sonnet-4-20250514"
+
+# 1M context (tier 4 required)
+model="claude-sonnet-4-20250514-1m"
+
+# 1M context + reasoning
+model="claude-sonnet-4-20250514-1m-reasoning-high"
+```
+
+### How it Works
+
+When you use a `-1m` model variant:
+1. The proxy automatically adds the `context-1m-2025-08-07` beta header
+2. The `-1m` suffix is stripped before sending to Anthropic
+3. If you don't have tier 4 access, the request will fail with an error
+
+**Important:** Only use `-1m` variants if you have confirmed tier 4 access. Standard Pro/Max subscriptions do NOT have 1M context access.
 
 ### Automatic max_tokens Adjustment
 

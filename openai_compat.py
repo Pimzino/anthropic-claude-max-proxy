@@ -19,33 +19,50 @@ REASONING_BUDGET_MAP = {
 }
 
 
-def parse_reasoning_model(model_name: str) -> Tuple[str, Optional[str]]:
+def parse_reasoning_model(model_name: str) -> Tuple[str, Optional[str], bool]:
     """
-    Parse model name to extract base model and reasoning level.
+    Parse model name to extract base model, reasoning level, and 1M context flag.
 
     Args:
-        model_name: Model name, potentially with -reasoning-{level} suffix
+        model_name: Model name, potentially with -1m and/or -reasoning-{level} suffixes
 
     Returns:
-        tuple: (base_model_name, reasoning_level) where reasoning_level is None if not a reasoning model
+        tuple: (base_model_name, reasoning_level, use_1m_context)
+            - base_model_name: Model name without -1m or -reasoning suffixes
+            - reasoning_level: "low", "medium", "high", or None
+            - use_1m_context: True if -1m variant is used
 
     Examples:
-        "claude-sonnet-4-20250514" -> ("claude-sonnet-4-20250514", None)
-        "claude-sonnet-4-20250514-reasoning-high" -> ("claude-sonnet-4-20250514", "high")
+        "claude-sonnet-4-20250514" -> ("claude-sonnet-4-20250514", None, False)
+        "claude-sonnet-4-20250514-reasoning-high" -> ("claude-sonnet-4-20250514", "high", False)
+        "claude-sonnet-4-20250514-1m" -> ("claude-sonnet-4-20250514", None, True)
+        "claude-sonnet-4-20250514-1m-reasoning-high" -> ("claude-sonnet-4-20250514", "high", True)
     """
-    if "-reasoning-" in model_name:
-        parts = model_name.rsplit("-reasoning-", 1)
+    use_1m_context = False
+    reasoning_level = None
+    base_model = model_name
+
+    # Check for -1m variant
+    if "-1m" in model_name:
+        use_1m_context = True
+        # Remove -1m from the model name
+        base_model = model_name.replace("-1m", "")
+        logger.debug(f"Detected 1M context variant: {model_name} -> {base_model}")
+
+    # Check for -reasoning-{level} variant
+    if "-reasoning-" in base_model:
+        parts = base_model.rsplit("-reasoning-", 1)
         base_model = parts[0]
         reasoning_level = parts[1] if len(parts) > 1 else None
 
         # Validate reasoning level
         if reasoning_level and reasoning_level in REASONING_BUDGET_MAP:
-            return base_model, reasoning_level
+            logger.debug(f"Detected reasoning variant: level={reasoning_level}")
         else:
             logger.warning(f"Invalid reasoning level in model name: {reasoning_level}. Valid values: {list(REASONING_BUDGET_MAP.keys())}")
-            return model_name, None
+            reasoning_level = None
 
-    return model_name, None
+    return base_model, reasoning_level, use_1m_context
 
 
 def convert_openai_messages_to_anthropic(openai_messages: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], Optional[str]]:
@@ -258,17 +275,21 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
     # Convert messages
     messages, system_text = convert_openai_messages_to_anthropic(openai_request.get("messages", []))
 
-    # Parse model name for reasoning variants
+    # Parse model name for reasoning and 1M context variants
     model_name = openai_request.get("model", "claude-sonnet-4-5-20250929")
-    base_model, model_reasoning_level = parse_reasoning_model(model_name)
+    base_model, model_reasoning_level, use_1m_context = parse_reasoning_model(model_name)
 
-    # Build Anthropic request (use base model name, not the reasoning variant)
+    # Build Anthropic request (use base model name, without variant suffixes)
     anthropic_request = {
         "model": base_model,
         "messages": messages,
         "max_tokens": openai_request.get("max_tokens", 4096),
         "stream": openai_request.get("stream", False)
     }
+
+    # Store 1M context flag for beta header handling (custom metadata field)
+    if use_1m_context:
+        anthropic_request["_use_1m_context"] = True
 
     # Add system message if present
     if system_text:

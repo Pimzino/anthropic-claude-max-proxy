@@ -272,10 +272,21 @@ def strip_cache_control_from_messages(request_data: Dict[str, Any]) -> Dict[str,
 
 async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token: str, client_beta_headers: Optional[str] = None) -> httpx.Response:
     """Make a request to Anthropic API"""
-    # Required beta headers for authentication flow
-    required_betas = ["claude-code-20250219", "oauth-2025-04-20", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
+    # Core required beta header for OAuth authentication
+    required_betas = ["oauth-2025-04-20"]
 
-    # Merge client beta headers if provided
+    # Check for 1M context variant (custom metadata field set by model parsing)
+    use_1m_context = anthropic_request.pop("_use_1m_context", False)
+    if use_1m_context:
+        required_betas.append("context-1m-2025-08-07")
+        logger.debug("Adding context-1m beta (1M context model variant requested)")
+
+    # Conditionally add thinking beta only if thinking is enabled
+    if anthropic_request.get("thinking", {}).get("type") == "enabled":
+        required_betas.append("interleaved-thinking-2025-05-14")
+        logger.debug("Adding interleaved-thinking beta (thinking enabled)")
+
+    # Merge client beta headers if provided (allows AI agents to request specific betas)
     if client_beta_headers:
         client_betas = [beta.strip() for beta in client_beta_headers.split(",")]
         # Combine and deduplicate
@@ -284,6 +295,7 @@ async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token
         all_betas = required_betas
 
     beta_header_value = ",".join(all_betas)
+    logger.debug(f"Final beta headers: {beta_header_value}")
 
     headers = {
         "host": "api.anthropic.com",
@@ -319,10 +331,21 @@ async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token
 
 async def stream_anthropic_response(request_id: str, anthropic_request: Dict[str, Any], access_token: str, client_beta_headers: Optional[str] = None) -> AsyncIterator[str]:
     """Stream response from Anthropic API"""
-    # Required beta headers for authentication flow
-    required_betas = ["claude-code-20250219", "oauth-2025-04-20", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
+    # Core required beta header for OAuth authentication
+    required_betas = ["oauth-2025-04-20"]
 
-    # Merge client beta headers if provided
+    # Check for 1M context variant (custom metadata field set by model parsing)
+    use_1m_context = anthropic_request.pop("_use_1m_context", False)
+    if use_1m_context:
+        required_betas.append("context-1m-2025-08-07")
+        logger.debug(f"[{request_id}] Adding context-1m beta (1M context model variant requested)")
+
+    # Conditionally add thinking beta only if thinking is enabled
+    if anthropic_request.get("thinking", {}).get("type") == "enabled":
+        required_betas.append("interleaved-thinking-2025-05-14")
+        logger.debug(f"[{request_id}] Adding interleaved-thinking beta (thinking enabled)")
+
+    # Merge client beta headers if provided (allows AI agents to request specific betas)
     if client_beta_headers:
         client_betas = [beta.strip() for beta in client_beta_headers.split(",")]
         # Combine and deduplicate
@@ -331,6 +354,7 @@ async def stream_anthropic_response(request_id: str, anthropic_request: Dict[str
         all_betas = required_betas
 
     beta_header_value = ",".join(all_betas)
+    logger.debug(f"[{request_id}] Final beta headers: {beta_header_value}")
 
     headers = {
         "host": "api.anthropic.com",
