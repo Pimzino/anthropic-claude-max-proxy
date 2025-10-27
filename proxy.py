@@ -228,8 +228,8 @@ def inject_claude_code_system_message(request_data: Dict[str, Any]) -> Dict[str,
 
 async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token: str, client_beta_headers: Optional[str] = None) -> httpx.Response:
     """Make a request to Anthropic API"""
-    # Required beta headers matching OpenCode implementation
-    required_betas = ["claude-code-20250219", "oauth-2025-04-20", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
+    # Required beta headers matching OpenCode implementation (oauth-2025-04-20 NOT included - only for auth endpoints)
+    required_betas = ["claude-code-20250219", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
 
     # Merge client beta headers if provided
     if client_beta_headers:
@@ -273,8 +273,8 @@ async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token
 
 async def stream_anthropic_response(request_id: str, anthropic_request: Dict[str, Any], access_token: str, client_beta_headers: Optional[str] = None) -> AsyncIterator[str]:
     """Stream response from Anthropic API"""
-    # Required beta headers matching OpenCode implementation
-    required_betas = ["claude-code-20250219", "oauth-2025-04-20", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
+    # Required beta headers matching OpenCode implementation (oauth-2025-04-20 NOT included - only for auth endpoints)
+    required_betas = ["claude-code-20250219", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
 
     # Merge client beta headers if provided
     if client_beta_headers:
@@ -475,7 +475,7 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
     client_beta_headers = headers_dict.get("anthropic-beta")
 
     # Log the final beta headers that will be sent
-    required_betas = ["claude-code-20250219", "oauth-2025-04-20", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
+    required_betas = ["claude-code-20250219", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
     if client_beta_headers:
         client_betas = [beta.strip() for beta in client_beta_headers.split(",")]
         all_betas = list(dict.fromkeys(required_betas + client_betas))
