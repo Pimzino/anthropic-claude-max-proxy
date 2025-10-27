@@ -243,6 +243,41 @@ def convert_openai_content_to_anthropic(openai_content: List[Dict[str, Any]]) ->
                 "text": item.get("text", "")
             })
 
+        elif item_type == "tool_result":
+            tool_result_content = item.get("content")
+
+            if isinstance(tool_result_content, list):
+                text_parts = []
+                for part in tool_result_content:
+                    if isinstance(part, dict):
+                        part_type = part.get("type")
+                        if part_type == "text":
+                            text_parts.append(part.get("text", ""))
+                        else:
+                            text_parts.append(json.dumps(part))
+                    else:
+                        text_parts.append(str(part))
+                result_content = "\n".join(text_parts)
+            elif isinstance(tool_result_content, str):
+                result_content = tool_result_content
+            elif tool_result_content is None:
+                result_content = ""
+            else:
+                result_content = json.dumps(tool_result_content)
+
+            tool_result_block = {
+                "type": "tool_result",
+                "tool_use_id": item.get("tool_use_id", ""),
+                "content": result_content
+            }
+
+            if "status" in item:
+                tool_result_block["status"] = item["status"]
+            if "is_error" in item:
+                tool_result_block["is_error"] = item["is_error"]
+
+            anthropic_content.append(tool_result_block)
+
         elif item_type == "image_url":
             # Convert OpenAI image_url to Anthropic image format
             image_url = item.get("image_url", {})
