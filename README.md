@@ -45,7 +45,7 @@ This proxy is aligned with the [OpenCode](https://github.com/anthropics/opencode
 
 **Cache Control:**
 - Automatic ephemeral cache control on system messages
-- Strips cache_control from user/assistant message content blocks (requires long context beta not available to all Max users)
+- Automatic caching on the last 2 user messages for optimal performance
 
 ## Prerequisites
 

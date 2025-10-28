@@ -230,48 +230,77 @@ def inject_claude_code_system_message(request_data: Dict[str, Any]) -> Dict[str,
     return modified_request
 
 
-def strip_cache_control_from_messages(request_data: Dict[str, Any]) -> Dict[str, Any]:
+def add_prompt_caching(request_data: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Strip cache_control from user/assistant message content blocks.
+    Add prompt caching breakpoints following Anthropic's best practices.
 
-    cache_control on message content requires context-1m-2025-08-07 beta (long context),
-    which is not available to all Max subscriptions. System messages can keep cache_control.
+    Strategy:
+    - Add cache_control to system message (if present)
+    - Add cache_control to the last 2 user messages to cache recent conversation
+    - Only mark the last content block in each cached message
+
+    Anthropic prompt caching docs: https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
     """
     modified_request = request_data.copy()
+    cache_added_count = 0
 
-    if 'messages' not in modified_request:
-        return modified_request
+    # Add cache_control to system message if present
+    if 'system' in modified_request:
+        system = modified_request['system']
 
-    modified_messages = []
-    stripped_count = 0
+        # System can be a string or array of content blocks
+        if isinstance(system, list) and len(system) > 0:
+            # Mark the last system block for caching
+            last_block = system[-1]
+            if isinstance(last_block, dict) and 'cache_control' not in last_block:
+                last_block['cache_control'] = {'type': 'ephemeral'}
+                cache_added_count += 1
+                logger.debug("Added cache_control to system message (last block)")
+        elif isinstance(system, str):
+            # Convert string system to array format with cache_control
+            modified_request['system'] = [
+                {
+                    'type': 'text',
+                    'text': system,
+                    'cache_control': {'type': 'ephemeral'}
+                }
+            ]
+            cache_added_count += 1
+            logger.debug("Added cache_control to system message (converted from string)")
 
-    for message in modified_request['messages']:
-        modified_message = message.copy()
+    # Add cache_control to the last 2 user messages for conversation caching
+    if 'messages' in modified_request:
+        messages = modified_request['messages']
 
-        # Only process user and assistant messages (not system)
-        if message.get('role') in ['user', 'assistant']:
-            content = modified_message.get('content')
+        # Find the last 2 user messages
+        user_message_indices = [i for i, msg in enumerate(messages) if msg.get('role') == 'user']
 
-            if isinstance(content, list):
-                # Content is an array of blocks - strip cache_control from each
-                modified_content = []
-                for block in content:
-                    if isinstance(block, dict):
-                        modified_block = block.copy()
-                        if 'cache_control' in modified_block:
-                            del modified_block['cache_control']
-                            stripped_count += 1
-                        modified_content.append(modified_block)
-                    else:
-                        modified_content.append(block)
-                modified_message['content'] = modified_content
+        # Cache the last 2 user messages (or fewer if there aren't 2)
+        cache_indices = user_message_indices[-2:] if len(user_message_indices) >= 2 else user_message_indices
 
-        modified_messages.append(modified_message)
+        for idx in cache_indices:
+            message = messages[idx]
+            content = message.get('content')
 
-    modified_request['messages'] = modified_messages
+            if isinstance(content, list) and len(content) > 0:
+                # Mark the last content block for caching
+                last_block = content[-1]
+                if isinstance(last_block, dict) and 'cache_control' not in last_block:
+                    last_block['cache_control'] = {'type': 'ephemeral'}
+                    cache_added_count += 1
+            elif isinstance(content, str):
+                # Convert string content to array format with cache_control
+                messages[idx]['content'] = [
+                    {
+                        'type': 'text',
+                        'text': content,
+                        'cache_control': {'type': 'ephemeral'}
+                    }
+                ]
+                cache_added_count += 1
 
-    if stripped_count > 0:
-        logger.debug(f"Stripped cache_control from {stripped_count} message content blocks (long context beta not available)")
+    if cache_added_count > 0:
+        logger.debug(f"Added prompt caching to {cache_added_count} locations (system + last user messages)")
 
     return modified_request
 
@@ -527,8 +556,8 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
     # Inject Claude Code system message to bypass authentication detection
     anthropic_request = inject_claude_code_system_message(anthropic_request)
 
-    # Strip cache_control from message content blocks (requires long context beta)
-    anthropic_request = strip_cache_control_from_messages(anthropic_request)
+    # Add cache_control to message content blocks for optimal caching
+    anthropic_request = add_prompt_caching(anthropic_request)
 
     # Extract client beta headers
     client_beta_headers = headers_dict.get("anthropic-beta")
@@ -662,10 +691,10 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
         # Inject Claude Code system message to bypass authentication detection
         anthropic_request = inject_claude_code_system_message(anthropic_request)
 
-        # Strip cache_control from message content blocks (requires long context beta)
-        anthropic_request = strip_cache_control_from_messages(anthropic_request)
+        # Add cache_control to message content blocks for optimal caching
+        anthropic_request = add_prompt_caching(anthropic_request)
 
-        logger.debug(f"[{request_id}] Final Anthropic request (after stripping): {json.dumps(anthropic_request, indent=2)}")
+        logger.debug(f"[{request_id}] Final Anthropic request (after adding prompt caching): {json.dumps(anthropic_request, indent=2)}")
 
         # Extract client beta headers (headers_dict already created at top of function)
         client_beta_headers = headers_dict.get("anthropic-beta")
