@@ -604,7 +604,7 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
             anthropic_request["stop_sequences"] = stop
 
     # Convert tools
-    if "tools" in openai_request:
+    if "tools" in openai_request and openai_request["tools"]:
         logger.debug(f"[REQUEST_CONVERSION] Found 'tools' field in OpenAI request with {len(openai_request['tools'])} tools")
         tools = convert_openai_tools_to_anthropic(openai_request["tools"])
         if tools:
@@ -614,7 +614,7 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
             logger.debug("[REQUEST_CONVERSION] No tools after conversion (empty result)")
 
     # Convert functions (legacy)
-    if "functions" in openai_request:
+    if "functions" in openai_request and openai_request["functions"]:
         logger.debug(f"[REQUEST_CONVERSION] Found 'functions' field (legacy) in OpenAI request with {len(openai_request['functions'])} functions")
         tools = convert_openai_functions_to_anthropic(openai_request["functions"])
         if tools:
