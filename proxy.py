@@ -31,7 +31,13 @@ from openai_compat import (
     convert_anthropic_response_to_openai,
     convert_anthropic_stream_to_openai
 )
-from constants import OPENAI_MODELS_LIST
+from constants import (
+    OPENAI_MODELS_LIST,
+    CLAUDE_CODE_SPOOF_MESSAGE,
+    USER_AGENT,
+    X_APP_HEADER,
+    STAINLESS_HEADERS,
+)
 
 # Setup logging
 logging.basicConfig(level=getattr(logging, LOG_LEVEL.upper()))
@@ -205,7 +211,7 @@ def inject_claude_code_system_message(request_data: Dict[str, Any]) -> Dict[str,
     """Inject Claude Code system message to bypass authentication detection"""
     modified_request = request_data.copy()
 
-    claude_code_spoof = "You are Claude Code, Anthropic's official CLI for Claude."
+    claude_code_spoof = CLAUDE_CODE_SPOOF_MESSAGE
     spoof_block = {"type": "text", "text": claude_code_spoof}
 
     existing_system = modified_request.get("system")
@@ -335,19 +341,12 @@ async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token
     headers = {
         "host": "api.anthropic.com",
         "Accept": "application/json",
-        "X-Stainless-Retry-Count": "0",
-        "X-Stainless-Timeout": "600",
-        "X-Stainless-Lang": "js",
-        "X-Stainless-Package-Version": "0.60.0",
-        "X-Stainless-OS": "Windows",
-        "X-Stainless-Arch": "x64",
-        "X-Stainless-Runtime": "node",
-        "X-Stainless-Runtime-Version": "v22.19.0",
+        **STAINLESS_HEADERS,
         "anthropic-dangerous-direct-browser-access": "true",
         "authorization": f"Bearer {access_token}",
         "anthropic-version": "2023-06-01",
-        "x-app": "cli",
-        "User-Agent": "claude-cli/1.0.113 (external, cli)",
+        "x-app": X_APP_HEADER,
+        "User-Agent": USER_AGENT,
         "content-type": "application/json",
         "anthropic-beta": beta_header_value,
         "x-stainless-helper-method": "stream",
@@ -407,19 +406,12 @@ async def stream_anthropic_response(
     headers = {
         "host": "api.anthropic.com",
         "Accept": "application/json",
-        "X-Stainless-Retry-Count": "0",
-        "X-Stainless-Timeout": "600",
-        "X-Stainless-Lang": "js",
-        "X-Stainless-Package-Version": "0.60.0",
-        "X-Stainless-OS": "Windows",
-        "X-Stainless-Arch": "x64",
-        "X-Stainless-Runtime": "node",
-        "X-Stainless-Runtime-Version": "v22.19.0",
+        **STAINLESS_HEADERS,
         "anthropic-dangerous-direct-browser-access": "true",
         "authorization": f"Bearer {access_token}",
         "anthropic-version": "2023-06-01",
-        "x-app": "cli",
-        "User-Agent": "claude-cli/1.0.113 (external, cli)",
+        "x-app": X_APP_HEADER,
+        "User-Agent": USER_AGENT,
         "content-type": "application/json",
         "anthropic-beta": beta_header_value,
         "x-stainless-helper-method": "stream",

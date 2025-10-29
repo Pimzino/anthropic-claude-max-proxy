@@ -227,3 +227,38 @@ __all__ = [
     "OPENAI_MODELS_LIST",
     "resolve_model_metadata",
 ]
+
+# HTTP Request Headers and Spoofing Constants
+# These values are used to spoof requests as coming from the official Claude CLI
+CLAUDE_CODE_SPOOF_MESSAGE = "You are Claude Code, Anthropic's official CLI for Claude."
+
+# User-Agent string for API requests
+USER_AGENT = "claude-cli/1.0.113 (external, cli)"
+
+# x-app header value
+X_APP_HEADER = "cli"
+
+# Stainless SDK headers (mimics official Claude CLI behavior)
+STAINLESS_HEADERS = {
+    "X-Stainless-Retry-Count": "0",
+    "X-Stainless-Timeout": "600",
+    "X-Stainless-Lang": "js",
+    "X-Stainless-Package-Version": "0.60.0",
+    "X-Stainless-OS": "Windows",
+    "X-Stainless-Arch": "x64",
+    "X-Stainless-Runtime": "node",
+    "X-Stainless-Runtime-Version": "v22.19.0",
+    "x-stainless-helper-method": "stream",
+}
+
+__all__ = [
+    "REASONING_BUDGET_MAP",
+    "BASE_MODELS",
+    "MODEL_REGISTRY",
+    "OPENAI_MODELS_LIST",
+    "resolve_model_metadata",
+    "CLAUDE_CODE_SPOOF_MESSAGE",
+    "USER_AGENT",
+    "X_APP_HEADER",
+    "STAINLESS_HEADERS",
+]
