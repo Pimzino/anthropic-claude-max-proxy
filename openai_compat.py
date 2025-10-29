@@ -514,7 +514,7 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
         anthropic_request["_use_1m_context"] = True
 
     # Add system message blocks if present (as array, not string)
-    # NOTE: The Claude Code spoof message will be injected by proxy.py's inject_claude_code_system_message()
+    # NOTE: The Claude Code spoof message will be injected by anthropic.py's inject_claude_code_system_message()
     # which handles both string and array formats, so we preserve the array format here
     if system_blocks:
         anthropic_request["system"] = system_blocks
