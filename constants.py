@@ -179,6 +179,69 @@ _build_registry()
 OPENAI_MODELS_LIST.sort(key=lambda model: model["id"])  # type: ignore[index]
 
 
+# Load and register custom models from models.json
+CUSTOM_MODELS_CONFIG: Dict[str, Dict[str, any]] = {}
+
+def _load_custom_models() -> None:
+    """Load custom models from models.json and add them to the registry"""
+    from config_loader import load_custom_models
+
+    custom_models = load_custom_models()
+
+    for model_config in custom_models:
+        model_id = model_config["id"]
+
+        # Store the full config for later use (API key, base_url, etc.)
+        CUSTOM_MODELS_CONFIG[model_id] = model_config
+
+        # Create registry entry for the custom model
+        entry = ModelRegistryEntry(
+            openai_id=model_id,
+            anthropic_id="",  # Not an Anthropic model
+            created=0,  # Custom models don't have a creation timestamp
+            owned_by=model_config.get("owned_by", "custom"),
+            context_length=model_config.get("context_length", 200000),
+            max_completion_tokens=model_config.get("max_completion_tokens", 4096),
+            reasoning_level=None,
+            reasoning_budget=None,
+            use_1m_context=False,
+            include_in_listing=True,
+        )
+
+        _register_model(entry)
+        logger.debug(f"Registered custom model: {model_id}")
+
+# Load custom models on module import
+_load_custom_models()
+
+# Re-sort models list after adding custom models
+OPENAI_MODELS_LIST.sort(key=lambda model: model["id"])  # type: ignore[index]
+
+
+def is_custom_model(model_id: str) -> bool:
+    """Check if a model ID is a custom model (not Anthropic)
+
+    Args:
+        model_id: The model identifier
+
+    Returns:
+        True if the model is a custom model, False otherwise
+    """
+    return model_id in CUSTOM_MODELS_CONFIG
+
+
+def get_custom_model_config(model_id: str) -> Optional[Dict[str, any]]:
+    """Get the configuration for a custom model
+
+    Args:
+        model_id: The model identifier
+
+    Returns:
+        The model configuration dict, or None if not a custom model
+    """
+    return CUSTOM_MODELS_CONFIG.get(model_id)
+
+
 def _parse_legacy_model_name(model_name: str) -> Tuple[str, Optional[str], bool]:
     """
     Parse legacy Anthropic model names with -1m / -reasoning suffixes.
@@ -226,6 +289,13 @@ __all__ = [
     "MODEL_REGISTRY",
     "OPENAI_MODELS_LIST",
     "resolve_model_metadata",
+    "CLAUDE_CODE_SPOOF_MESSAGE",
+    "USER_AGENT",
+    "X_APP_HEADER",
+    "STAINLESS_HEADERS",
+    "CUSTOM_MODELS_CONFIG",
+    "is_custom_model",
+    "get_custom_model_config",
 ]
 
 # HTTP Request Headers and Spoofing Constants
@@ -250,15 +320,3 @@ STAINLESS_HEADERS = {
     "X-Stainless-Runtime-Version": "v22.19.0",
     "x-stainless-helper-method": "stream",
 }
-
-__all__ = [
-    "REASONING_BUDGET_MAP",
-    "BASE_MODELS",
-    "MODEL_REGISTRY",
-    "OPENAI_MODELS_LIST",
-    "resolve_model_metadata",
-    "CLAUDE_CODE_SPOOF_MESSAGE",
-    "USER_AGENT",
-    "X_APP_HEADER",
-    "STAINLESS_HEADERS",
-]

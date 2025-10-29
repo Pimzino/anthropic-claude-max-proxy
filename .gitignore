@@ -46,6 +46,7 @@ config.json
 # Tokens
 *.json
 !config.example.json
+!models.example.json
 !package.json
 !package-lock.json
 

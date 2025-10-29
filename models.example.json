@@ -1,0 +1,44 @@
+{
+  "_comment": "Custom models configuration - copy this to models.json and add your API keys",
+  "_schema": {
+    "custom_models": "Array of custom OpenAI-compatible model configurations",
+    "model_fields": {
+      "id": "Model identifier (required) - used in API requests",
+      "base_url": "OpenAI-compatible API endpoint (required) - e.g., https://api.provider.com/v1",
+      "api_key": "API key for authentication (required)",
+      "context_length": "Maximum context window in tokens (optional, default: 200000)",
+      "max_completion_tokens": "Maximum completion tokens (optional, default: 4096)",
+      "supports_reasoning": "Whether model supports reasoning/thinking (optional, default: false)",
+      "owned_by": "Model provider name (optional, default: 'custom')"
+    }
+  },
+  "custom_models": [
+    {
+      "id": "glm-4.6",
+      "base_url": "https://api.z.ai/api/coding/paas/v4",
+      "api_key": "YOUR_Z_AI_API_KEY_HERE",
+      "context_length": 200000,
+      "max_completion_tokens": 8192,
+      "supports_reasoning": true,
+      "owned_by": "zhipu-ai"
+    },
+    {
+      "id": "glm-4.5",
+      "base_url": "https://api.z.ai/api/coding/paas/v4",
+      "api_key": "YOUR_Z_AI_API_KEY_HERE",
+      "context_length": 200000,
+      "max_completion_tokens": 8192,
+      "supports_reasoning": false,
+      "owned_by": "zhipu-ai"
+    },
+    {
+      "id": "glm-4.5-air",
+      "base_url": "https://api.z.ai/api/coding/paas/v4",
+      "api_key": "YOUR_Z_AI_API_KEY_HERE",
+      "context_length": 200000,
+      "max_completion_tokens": 8192,
+      "supports_reasoning": false,
+      "owned_by": "zhipu-ai"
+    }
+  ]
+}

@@ -46,6 +46,12 @@ from constants import (
     USER_AGENT,
     X_APP_HEADER,
     STAINLESS_HEADERS,
+    is_custom_model,
+    get_custom_model_config,
+)
+from custom_provider import (
+    make_custom_provider_request,
+    stream_custom_provider_response,
 )
 
 # Setup logging
@@ -319,7 +325,112 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
         logger.warning(f"[{request_id}] Client sent anthropic-beta header: {headers_dict['anthropic-beta']}")
     logger.debug(f"[{request_id}] All HTTP headers from client: {dict(raw_request.headers)}")
 
-    # Get valid access token with automatic refresh
+    # Check if this is a custom model (non-Anthropic)
+    if is_custom_model(request.model):
+        logger.info(f"[{request_id}] Routing to custom provider for model: {request.model}")
+
+        # Get custom model configuration
+        model_config = get_custom_model_config(request.model)
+        if not model_config:
+            logger.error(f"[{request_id}] Custom model config not found: {request.model}")
+            raise HTTPException(
+                status_code=400,
+                detail={"error": {"message": f"Custom model '{request.model}' not properly configured"}}
+            )
+
+        base_url = model_config["base_url"]
+        api_key = model_config["api_key"]
+
+        try:
+            # Pass request directly to custom provider (no Anthropic conversion)
+            openai_request_dict = request.model_dump()
+
+            if request.stream:
+                # Handle streaming response
+                logger.debug(f"[{request_id}] Initiating streaming request to custom provider")
+
+                tracer = maybe_create_stream_tracer(
+                    enabled=STREAM_TRACE_ENABLED,
+                    request_id=request_id,
+                    route="custom-provider",
+                    base_dir=STREAM_TRACE_DIR,
+                    max_bytes=STREAM_TRACE_MAX_BYTES,
+                )
+
+                async def custom_stream():
+                    try:
+                        async for chunk in stream_custom_provider_response(
+                            openai_request_dict,
+                            base_url,
+                            api_key,
+                            request_id,
+                            tracer=tracer,
+                        ):
+                            yield chunk
+                    finally:
+                        if tracer:
+                            tracer.close()
+
+                return StreamingResponse(
+                    custom_stream(),
+                    media_type="text/event-stream",
+                    headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+                )
+            else:
+                # Handle non-streaming response
+                logger.debug(f"[{request_id}] Making non-streaming request to custom provider")
+                response = await make_custom_provider_request(
+                    openai_request_dict,
+                    base_url,
+                    api_key,
+                    request_id
+                )
+
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                logger.info(f"[{request_id}] Custom provider request completed in {elapsed_ms}ms status={response.status_code}")
+
+                if response.status_code != 200:
+                    # Return error in OpenAI format
+                    try:
+                        error_json = response.json()
+                    except:
+                        error_json = {
+                            "error": {
+                                "message": response.text,
+                                "type": "api_error",
+                                "code": response.status_code
+                            }
+                        }
+
+                    logger.error(f"[{request_id}] Custom provider error {response.status_code}: {error_json}")
+                    raise HTTPException(status_code=response.status_code, detail=error_json)
+
+                # Return response as-is (already in OpenAI format)
+                openai_response = response.json()
+
+                final_elapsed_ms = int((time.time() - start_time) * 1000)
+                logger.info(f"[{request_id}] ===== CUSTOM PROVIDER COMPLETION FINISHED ===== Total time: {final_elapsed_ms}ms")
+                return openai_response
+
+        except HTTPException:
+            final_elapsed_ms = int((time.time() - start_time) * 1000)
+            logger.error(f"[{request_id}] ===== CUSTOM PROVIDER COMPLETION FAILED ===== Total time: {final_elapsed_ms}ms")
+            raise
+        except Exception as e:
+            final_elapsed_ms = int((time.time() - start_time) * 1000)
+            logger.error(f"[{request_id}] Custom provider request failed after {final_elapsed_ms}ms: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": {
+                        "message": str(e),
+                        "type": "internal_error",
+                        "code": 500
+                    }
+                }
+            )
+
+    # Get valid access token with automatic refresh (for Anthropic models)
     access_token = await oauth_manager.get_valid_token_async()
     if not access_token:
         logger.error(f"[{request_id}] No valid token available")

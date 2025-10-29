@@ -123,6 +123,91 @@ The OpenAI compatibility layer supports:
 
 - Supports all Anthropic Models that you have access to with your Claude Pro / Max subscription.
 
+## Custom Models Configuration
+
+The proxy now supports routing requests to **custom OpenAI-compatible providers** (like Z.AI, OpenRouter, etc.) alongside Anthropic models. This allows you to use multiple providers through a single proxy endpoint without changing your client configuration.
+
+### Setup
+
+1. **Create models.json:**
+```bash
+cp models.example.json models.json
+```
+
+2. **Configure your custom models:**
+
+Edit `models.json` and add your custom model configurations:
+
+```json
+{
+  "custom_models": [
+    {
+      "id": "glm-4.6",
+      "base_url": "https://api.z.ai/api/coding/paas/v4",
+      "api_key": "YOUR_Z_AI_API_KEY_HERE",
+      "context_length": 200000,
+      "max_completion_tokens": 8192,
+      "supports_reasoning": true,
+      "owned_by": "zhipu-ai"
+    }
+  ]
+}
+```
+
+### Configuration Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | ✅ Yes | Model identifier used in API requests |
+| `base_url` | ✅ Yes | OpenAI-compatible API endpoint (e.g., `https://api.provider.com/v1`) |
+| `api_key` | ✅ Yes | API key for authentication |
+| `context_length` | ❌ No | Maximum context window in tokens (default: 200000) |
+| `max_completion_tokens` | ❌ No | Maximum completion tokens (default: 4096) |
+| `supports_reasoning` | ❌ No | Whether model supports reasoning/thinking (default: false) |
+| `owned_by` | ❌ No | Model provider name (default: "custom") |
+
+### Usage
+
+Once configured, custom models appear in the `/v1/models` endpoint and can be used just like Anthropic models:
+
+```python
+# Using Z.AI GLM-4.6 through the proxy
+response = client.chat.completions.create(
+    model="glm-4.6",  # Your custom model ID
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+```
+
+### How It Works
+
+- **Custom models bypass Anthropic-specific processing** (no OAuth, no Claude Code spoofing, no prompt caching)
+- Requests are passed directly to the configured endpoint in OpenAI format
+- Each custom model uses its own API key (no OAuth required)
+- Supports both streaming and non-streaming requests
+- Custom models appear alongside Anthropic models in `/v1/models` listing
+
+### Example: Z.AI Coding Plan
+
+The Z.AI Coding Plan provides access to GLM-4.6 with an OpenAI-compatible API. See [Z.AI Documentation](https://docs.z.ai/devpack/tool/others) for details.
+
+```json
+{
+  "custom_models": [
+    {
+      "id": "glm-4.6",
+      "base_url": "https://api.z.ai/api/coding/paas/v4",
+      "api_key": "your-z-ai-api-key",
+      "context_length": 200000,
+      "max_completion_tokens": 8192,
+      "supports_reasoning": true,
+      "owned_by": "zhipu-ai"
+    }
+  ]
+}
+```
+
+**Note:** The `models.json` file is automatically gitignored to prevent accidentally committing API keys.
+
 ## Reasoning/Thinking Support
 
 The proxy supports Anthropic's extended thinking mode through OpenAI-compatible APIs. Thinking is **only enabled when explicitly requested**.

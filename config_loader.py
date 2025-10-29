@@ -10,7 +10,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 # Set up logger for config loader
 logger = logging.getLogger(__name__)
@@ -119,3 +119,64 @@ def get_config_loader() -> ConfigLoader:
     if _config_loader is None:
         _config_loader = ConfigLoader()
     return _config_loader
+
+
+def load_custom_models(models_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Load custom models from models.json file
+
+    Args:
+        models_path: Optional path to models.json file.
+                    Defaults to 'models.json' in the current directory.
+
+    Returns:
+        List of custom model configurations. Returns empty list if file doesn't exist
+        or if there's an error loading it.
+    """
+    path = Path(models_path) if models_path else Path("models.json")
+
+    if not path.exists():
+        logger.debug(f"Custom models file not found: {path}")
+        return []
+
+    try:
+        with open(path, 'r') as f:
+            data = json.load(f)
+
+        custom_models = data.get("custom_models", [])
+
+        if not isinstance(custom_models, list):
+            logger.warning(f"Invalid custom_models format in {path}: expected list, got {type(custom_models)}")
+            return []
+
+        # Validate each model has required fields
+        validated_models = []
+        for idx, model in enumerate(custom_models):
+            if not isinstance(model, dict):
+                logger.warning(f"Skipping invalid model at index {idx}: not a dictionary")
+                continue
+
+            # Check required fields
+            required_fields = ["id", "base_url", "api_key"]
+            missing_fields = [field for field in required_fields if field not in model]
+
+            if missing_fields:
+                logger.warning(f"Skipping model at index {idx}: missing required fields {missing_fields}")
+                continue
+
+            # Set defaults for optional fields
+            model.setdefault("context_length", 200000)
+            model.setdefault("max_completion_tokens", 4096)
+            model.setdefault("supports_reasoning", False)
+            model.setdefault("owned_by", "custom")
+
+            validated_models.append(model)
+
+        logger.info(f"Loaded {len(validated_models)} custom model(s) from {path}")
+        return validated_models
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse {path}: {e}")
+        return []
+    except IOError as e:
+        logger.error(f"Failed to read {path}: {e}")
+        return []
