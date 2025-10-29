@@ -11,7 +11,17 @@
     "_comment": "API endpoint: https://api.anthropic.com/v1/messages (no query params)",
     "_beta_features": "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
     "_note": "oauth-2025-04-20 NOT included - gates features not available to all Max users",
-    "request_timeout": 600
+    "timeouts": {
+      "_comment": "Timeout values in seconds - industry-standard configurations",
+      "connect": 10,
+      "_connect_note": "Time to establish TCP connection (industry standard: 5-10s)",
+      "read": 60,
+      "_read_note": "Time between data chunks - detects stalled streams without killing active ones",
+      "request": 120,
+      "_request_note": "Total timeout for non-streaming requests (2 minutes)",
+      "stream": 600,
+      "_stream_note": "Total timeout for streaming requests - LLM generations can take longer (10 minutes)"
+    }
   },
   "debug": {
     "stream_trace": {

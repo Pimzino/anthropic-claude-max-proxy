@@ -1,12 +1,13 @@
 """
-Custom provider integration layer.
-Handles requests to custom OpenAI-compatible API endpoints (e.g., Z.AI, OpenRouter, etc.)
+Custom provider integration for non-Anthropic models.
+Handles OpenAI-compatible API requests to custom endpoints.
 """
 import logging
-from typing import Dict, Any, AsyncIterator, Optional, TYPE_CHECKING
+from typing import Dict, Any, Optional, AsyncIterator, TYPE_CHECKING
 import httpx
+import json
 
-from settings import REQUEST_TIMEOUT
+from settings import REQUEST_TIMEOUT, STREAM_TIMEOUT, CONNECT_TIMEOUT, READ_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,8 @@ async def make_custom_provider_request(
     logger.debug(f"[{request_id}] Making custom provider request to {endpoint}")
     logger.debug(f"[{request_id}] Request body: {request_data}")
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=30.0)) as client:
+    # Use REQUEST_TIMEOUT for non-streaming with industry-standard CONNECT_TIMEOUT
+    async with httpx.AsyncClient(timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=CONNECT_TIMEOUT)) as client:
         response = await client.post(
             endpoint,
             json=request_data,
@@ -102,7 +104,8 @@ async def stream_custom_provider_response(
     logger.debug(f"[{request_id}] Streaming from custom provider: {endpoint}")
     logger.debug(f"[{request_id}] Request body: {request_data}")
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=30.0)) as client:
+    # Use STREAM_TIMEOUT for streaming requests with READ_TIMEOUT between chunks
+    async with httpx.AsyncClient(timeout=httpx.Timeout(STREAM_TIMEOUT, connect=CONNECT_TIMEOUT, read=READ_TIMEOUT)) as client:
         async with client.stream(
             "POST",
             endpoint,
@@ -117,7 +120,6 @@ async def stream_custom_provider_response(
                 error_text = await response.aread()
                 error_json = error_text.decode()
                 logger.error(f"[{request_id}] Custom provider error {response.status_code}: {error_json}")
-
                 if tracer:
                     tracer.log_error(f"custom provider error status={response.status_code} body={error_json}")
 
@@ -138,9 +140,9 @@ async def stream_custom_provider_response(
                         tracer.log_source_chunk(chunk)
                     yield chunk
             except httpx.ReadTimeout:
-                error_event = f"event: error\ndata: {{\"error\": \"Stream timeout after {REQUEST_TIMEOUT}s\"}}\n\n"
+                error_event = f"event: error\ndata: {{\"error\": \"Stream timeout after {STREAM_TIMEOUT}s\"}}\n\n"
                 if tracer:
-                    tracer.log_error(f"custom provider stream timeout after {REQUEST_TIMEOUT}s")
+                    tracer.log_error(f"custom provider stream timeout after {STREAM_TIMEOUT}s")
                     tracer.log_note("yielding timeout SSE event")
                 yield error_event
             except httpx.RemoteProtocolError as e:

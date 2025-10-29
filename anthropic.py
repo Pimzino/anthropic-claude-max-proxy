@@ -13,7 +13,7 @@ from constants import (
     X_APP_HEADER,
     STAINLESS_HEADERS,
 )
-from settings import REQUEST_TIMEOUT
+from settings import REQUEST_TIMEOUT, STREAM_TIMEOUT, CONNECT_TIMEOUT, READ_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
@@ -213,40 +213,36 @@ def add_prompt_caching(request_data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token: str, client_beta_headers: Optional[str] = None) -> httpx.Response:
-    """Make a request to Anthropic API"""
+    """Make a non-streaming request to Anthropic API"""
     # Core required beta header for OAuth authentication
     required_betas = ["oauth-2025-04-20"]
 
     if not anthropic_request.get("system"):
         anthropic_request = inject_claude_code_system_message(anthropic_request)
 
-    # Check for 1M context variant (custom metadata field set by model parsing)
-    use_1m_context = anthropic_request.pop("_use_1m_context", False)
-    if use_1m_context:
-        required_betas.append("context-1m-2025-08-07")
-        logger.debug("Adding context-1m beta (1M context model variant requested)")
-
-    # Conditionally add thinking beta only if thinking is enabled
-    if anthropic_request.get("thinking", {}).get("type") == "enabled":
+    # Check if thinking is enabled
+    thinking = anthropic_request.get("thinking")
+    if thinking and thinking.get("type") == "enabled":
         required_betas.append("interleaved-thinking-2025-05-14")
-        logger.debug("Adding interleaved-thinking beta (thinking enabled)")
 
-    # IGNORE client beta headers - they may request tier-4-only features
-    # We control beta headers based on request features, not client requests
+    # Check if tools are present
+    if anthropic_request.get("tools"):
+        required_betas.append("fine-grained-tool-streaming-2025-05-14")
+
+    # Merge with client beta headers if provided
     if client_beta_headers:
-        logger.debug(f"Ignoring client beta headers (not supported): {client_beta_headers}")
+        client_betas = [beta.strip() for beta in client_beta_headers.split(",")]
+        all_betas = list(dict.fromkeys(required_betas + client_betas))
+    else:
+        all_betas = required_betas
 
-    beta_header_value = ",".join(required_betas)
-    logger.debug(f"Final beta headers: {beta_header_value}")
+    beta_header_value = ",".join(all_betas)
 
     headers = {
-        "host": "api.anthropic.com",
-        "Accept": "application/json",
-        **STAINLESS_HEADERS,
-        "anthropic-dangerous-direct-browser-access": "true",
         "authorization": f"Bearer {access_token}",
         "anthropic-version": "2023-06-01",
         "x-app": X_APP_HEADER,
+        **STAINLESS_HEADERS,
         "User-Agent": USER_AGENT,
         "content-type": "application/json",
         "anthropic-beta": beta_header_value,
@@ -255,7 +251,8 @@ async def make_anthropic_request(anthropic_request: Dict[str, Any], access_token
         "sec-fetch-mode": "cors"
     }
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=30.0)) as client:
+    # Use REQUEST_TIMEOUT for non-streaming with industry-standard CONNECT_TIMEOUT
+    async with httpx.AsyncClient(timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=CONNECT_TIMEOUT)) as client:
         response = await client.post(
             "https://api.anthropic.com/v1/messages",
             json=anthropic_request,
@@ -323,7 +320,8 @@ async def stream_anthropic_response(
     if tracer:
         tracer.log_note(f"dispatching POST {headers['host']}/v1/messages for streaming")
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=30.0)) as client:
+    # Use STREAM_TIMEOUT for streaming requests with READ_TIMEOUT between chunks
+    async with httpx.AsyncClient(timeout=httpx.Timeout(STREAM_TIMEOUT, connect=CONNECT_TIMEOUT, read=READ_TIMEOUT)) as client:
         async with client.stream(
             "POST",
             "https://api.anthropic.com/v1/messages",
@@ -358,9 +356,9 @@ async def stream_anthropic_response(
                         tracer.log_source_chunk(chunk)
                     yield chunk
             except httpx.ReadTimeout:
-                error_event = f"event: error\ndata: {{\"error\": \"Stream timeout after {REQUEST_TIMEOUT}s\"}}\n\n"
+                error_event = f"event: error\ndata: {{\"error\": \"Stream timeout after {STREAM_TIMEOUT}s\"}}\n\n"
                 if tracer:
-                    tracer.log_error(f"anthropic stream timeout after {REQUEST_TIMEOUT}s")
+                    tracer.log_error(f"anthropic stream timeout after {STREAM_TIMEOUT}s")
                     tracer.log_note("yielding timeout SSE event")
                 yield error_event
             except httpx.RemoteProtocolError as e:

@@ -21,7 +21,16 @@ ANTHROPIC_VERSION = "2023-06-01"
 # - interleaved-thinking-2025-05-14: Added when thinking is enabled
 ANTHROPIC_BETA = "oauth-2025-04-20"  # Base beta header (others added conditionally)
 API_BASE = "https://api.anthropic.com"
-REQUEST_TIMEOUT = config.get("REQUEST_TIMEOUT", "api.request_timeout", 120.0)
+
+# Timeout configuration (industry-standard values)
+# Connection timeout: Time to establish TCP connection (industry standard: 5-10s)
+CONNECT_TIMEOUT = config.get("CONNECT_TIMEOUT", "api.timeouts.connect", 10.0)
+# Read timeout: Time between receiving data chunks, important for detecting stalled streams
+READ_TIMEOUT = config.get("READ_TIMEOUT", "api.timeouts.read", 60.0)
+# Request timeout: Total timeout for non-streaming requests
+REQUEST_TIMEOUT = config.get("REQUEST_TIMEOUT", "api.timeouts.request", 120.0)
+# Stream timeout: Total timeout for streaming requests (LLMs can take longer)
+STREAM_TIMEOUT = config.get("STREAM_TIMEOUT", "api.timeouts.stream", 600.0)
 
 # Stream tracing / debugging
 STREAM_TRACE_ENABLED = config.get("STREAM_TRACE_ENABLED", "debug.stream_trace.enabled", False)
