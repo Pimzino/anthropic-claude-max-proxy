@@ -231,7 +231,11 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
     logger.debug(f"[{request_id}] SYSTEM MESSAGE STRUCTURE: {json.dumps(anthropic_request.get('system', []), indent=2)}")
     logger.debug(f"[{request_id}] FULL REQUEST COMPARISON - Our request structure:")
     logger.debug(f"[{request_id}] - model: {anthropic_request.get('model')}")
-    logger.debug(f"[{request_id}] - system: {type(anthropic_request.get('system'))} with {len(anthropic_request.get('system', []))} elements")
+    system = anthropic_request.get('system')
+    if system:
+        logger.debug(f"[{request_id}] - system: {type(system)} with {len(system)} elements")
+    else:
+        logger.debug(f"[{request_id}] - system: None")
     logger.debug(f"[{request_id}] - messages: {len(anthropic_request.get('messages', []))} messages")
     logger.debug(f"[{request_id}] - stream: {anthropic_request.get('stream')}")
     logger.debug(f"[{request_id}] - temperature: {anthropic_request.get('temperature')}")
@@ -470,6 +474,7 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
         except Exception as e:
             final_elapsed_ms = int((time.time() - start_time) * 1000)
             logger.error(f"[{request_id}] Custom provider request failed after {final_elapsed_ms}ms: {e}")
+            logger.exception(f"[{request_id}] Full traceback:")
             raise HTTPException(
                 status_code=500,
                 detail={
@@ -602,6 +607,7 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
     except Exception as e:
         final_elapsed_ms = int((time.time() - start_time) * 1000)
         logger.error(f"[{request_id}] Request failed after {final_elapsed_ms}ms: {e}")
+        logger.exception(f"[{request_id}] Full traceback:")
         raise HTTPException(
             status_code=500,
             detail={

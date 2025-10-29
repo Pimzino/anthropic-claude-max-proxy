@@ -11,7 +11,9 @@ After adding comprehensive debug logging, requests to Anthropic models (like son
 object of type 'NoneType' has no len()
 ```
 
-### Root Cause
+### Root Causes
+
+#### Occurrence 1: openai_compat.py (Line 263)
 In `openai_compat.py`, line 263, the debug logging code was trying to get the length of `system_message_blocks` without checking if it was `None`:
 
 ```python
@@ -21,26 +23,52 @@ logger.debug(f"[MESSAGE_CONVERSION] Final result: {len(anthropic_messages)} Anth
 
 The `system_message_blocks` variable can be `None` when there are no system messages in the request, causing the `len()` call to fail.
 
-### Fix
-Added a conditional check before calling `len()`:
+**Fix**: Added a conditional check before calling `len()`:
 
 ```python
 # FIXED CODE:
 logger.debug(f"[MESSAGE_CONVERSION] Final result: {len(anthropic_messages)} Anthropic messages, {len(system_message_blocks) if system_message_blocks else 0} system blocks")
 ```
 
+#### Occurrence 2: proxy.py (Line 234)
+In `proxy.py`, line 234, similar issue with the `system` field in the Anthropic request:
+
+```python
+# BROKEN CODE:
+logger.debug(f"[{request_id}] - system: {type(anthropic_request.get('system'))} with {len(anthropic_request.get('system', []))} elements")
+```
+
+The problem was that `anthropic_request.get('system')` returns `None` when there's no system message, and we were trying to get both the type and length of `None`. The default `[]` only applied to the second `.get()` call, not the first.
+
+**Fix**: Properly handle the None case:
+
+```python
+# FIXED CODE:
+system = anthropic_request.get('system')
+if system:
+    logger.debug(f"[{request_id}] - system: {type(system)} with {len(system)} elements")
+else:
+    logger.debug(f"[{request_id}] - system: None")
+```
+
 ### Files Changed
 - `openai_compat.py` - Line 263
+- `proxy.py` - Lines 232-237
+- `proxy.py` - Added traceback logging to exception handlers (lines 604, 427)
 
 ### Testing
-After the fix:
+After the fixes:
 - ✅ Requests to Anthropic models work correctly
 - ✅ Debug logging still captures all necessary information
 - ✅ No linting errors
+- ✅ Full tracebacks now logged for easier debugging
 
 ### Prevention
 Similar checks were already in place for other potentially-None values in the debug logging:
 - Line 855: `len(tool_calls_result) if tool_calls_result else 0`
 - Line 856: `len(reasoning_content) if reasoning_content else 0`
 
-This pattern should be used consistently whenever calling `len()` on values that could be `None`.
+**Lesson Learned**: When calling `len()` or other methods on values that could be `None`, always check for None first or use a conditional expression. This is especially important in debug logging code where we're inspecting potentially optional fields.
+
+### Additional Improvements
+Added `logger.exception()` calls to exception handlers to capture full tracebacks, making future debugging much easier.
