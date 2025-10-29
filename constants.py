@@ -192,7 +192,8 @@ def _load_custom_models() -> None:
         model_id = model_config["id"]
 
         # Store the full config for later use (API key, base_url, etc.)
-        CUSTOM_MODELS_CONFIG[model_id] = model_config
+        # Use lowercase key for case-insensitive lookup
+        CUSTOM_MODELS_CONFIG[model_id.lower()] = model_config
 
         # Create registry entry for the custom model
         entry = ModelRegistryEntry(
@@ -227,7 +228,7 @@ def is_custom_model(model_id: str) -> bool:
     Returns:
         True if the model is a custom model, False otherwise
     """
-    return model_id in CUSTOM_MODELS_CONFIG
+    return model_id.lower() in CUSTOM_MODELS_CONFIG
 
 
 def get_custom_model_config(model_id: str) -> Optional[Dict[str, any]]:
@@ -239,7 +240,7 @@ def get_custom_model_config(model_id: str) -> Optional[Dict[str, any]]:
     Returns:
         The model configuration dict, or None if not a custom model
     """
-    return CUSTOM_MODELS_CONFIG.get(model_id)
+    return CUSTOM_MODELS_CONFIG.get(model_id.lower())
 
 
 def _parse_legacy_model_name(model_name: str) -> Tuple[str, Optional[str], bool]:

@@ -325,6 +325,10 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
         logger.warning(f"[{request_id}] Client sent anthropic-beta header: {headers_dict['anthropic-beta']}")
     logger.debug(f"[{request_id}] All HTTP headers from client: {dict(raw_request.headers)}")
 
+    # Log model routing decision
+    is_custom = is_custom_model(request.model)
+    logger.info(f"[{request_id}] Model: {request.model} | Custom: {is_custom} | Routing to: {'custom provider' if is_custom else 'Anthropic'}")
+
     # Check if this is a custom model (non-Anthropic)
     if is_custom_model(request.model):
         logger.info(f"[{request_id}] Routing to custom provider for model: {request.model}")
