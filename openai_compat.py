@@ -1262,12 +1262,33 @@ async def convert_anthropic_stream_to_openai(
                     break
 
                 if data_type == "error":
-                    error_chunk = {
-                        "error": {
-                            "message": data.get("error", {}).get("message", "Unknown error"),
-                            "type": data.get("error", {}).get("type", "api_error")
+                    # Handle error events - error can be a string or a dict
+                    error_value = data.get("error", {})
+                    if isinstance(error_value, str):
+                        # Simple string error (e.g., from timeout)
+                        error_chunk = {
+                            "error": {
+                                "message": error_value,
+                                "type": "api_error"
+                            }
                         }
-                    }
+                    elif isinstance(error_value, dict):
+                        # Structured error from Anthropic
+                        error_chunk = {
+                            "error": {
+                                "message": error_value.get("message", "Unknown error"),
+                                "type": error_value.get("type", "api_error")
+                            }
+                        }
+                    else:
+                        # Fallback for unexpected format
+                        error_chunk = {
+                            "error": {
+                                "message": str(error_value),
+                                "type": "api_error"
+                            }
+                        }
+
                     if tracer:
                         tracer.log_error(f"anthropic error event: {error_chunk}")
                     yield emit(error_chunk)

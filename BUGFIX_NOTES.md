@@ -102,3 +102,99 @@ Similar checks were already in place for other potentially-None values in the de
 
 ### Additional Improvements
 Added `logger.exception()` calls to exception handlers to capture full tracebacks, making future debugging much easier. This helped us quickly identify the exact line causing the error.
+
+---
+
+## Bug: Stream Error Handling - 'str' object has no attribute 'get' (Fixed)
+
+**Date**: October 30, 2025
+**Status**: ✅ FIXED
+
+### Issue
+When a stream timeout occurred, the error conversion code was failing with:
+```
+'str' object has no attribute 'get'
+```
+
+This happened during streaming responses when the Anthropic API timed out after 60 seconds.
+
+### Root Cause
+In `openai_compat.py`, line 1267, the error handling code assumed that `data["error"]` was always a dictionary:
+
+```python
+# BROKEN CODE:
+if data_type == "error":
+    error_chunk = {
+        "error": {
+            "message": data.get("error", {}).get("message", "Unknown error"),
+            "type": data.get("error", {}).get("type", "api_error")
+        }
+    }
+```
+
+However, when a timeout occurs in `anthropic.py`, it yields:
+```python
+error_event = f"event: error\ndata: {{\"error\": \"Stream timeout after {STREAM_TIMEOUT}s\"}}\n\n"
+```
+
+After JSON parsing, this becomes `{"error": "Stream timeout after 60s"}`, where `error` is a **string**, not a dict. Calling `.get("message")` on a string causes the error.
+
+### Fix
+Added proper type checking to handle both string and dict error formats:
+
+```python
+# FIXED CODE:
+if data_type == "error":
+    # Handle error events - error can be a string or a dict
+    error_value = data.get("error", {})
+    if isinstance(error_value, str):
+        # Simple string error (e.g., from timeout)
+        error_chunk = {
+            "error": {
+                "message": error_value,
+                "type": "api_error"
+            }
+        }
+    elif isinstance(error_value, dict):
+        # Structured error from Anthropic
+        error_chunk = {
+            "error": {
+                "message": error_value.get("message", "Unknown error"),
+                "type": error_value.get("type", "api_error")
+            }
+        }
+    else:
+        # Fallback for unexpected format
+        error_chunk = {
+            "error": {
+                "message": str(error_value),
+                "type": "api_error"
+            }
+        }
+```
+
+### Files Changed
+- `openai_compat.py` - Lines 1264-1275 (error handling in stream conversion)
+
+### Testing
+After the fix:
+- ✅ Stream timeouts are handled gracefully
+- ✅ Error messages are properly converted to OpenAI format
+- ✅ Both string and dict error formats are supported
+- ✅ No linting errors
+
+### Lesson Learned
+When handling data from external sources or different code paths, always validate the data type before assuming its structure. Use `isinstance()` checks to handle multiple formats gracefully.
+
+### Stream Trace Evidence
+From `stream_traces/20251029T232450Z_openai-chat_29fed74c.log`:
+```
+[2025-10-29T23:25:52.273] [ERROR] len=37
+anthropic stream timeout after 600.0s
+[2025-10-29T23:25:52.273] [NOTE] len=26
+yielding timeout SSE event
+[2025-10-29T23:25:52.274] [ERROR] len=57
+conversion exception: 'str' object has no attribute 'get'
+```
+
+The stream tracer helped identify the exact sequence of events leading to the error.
