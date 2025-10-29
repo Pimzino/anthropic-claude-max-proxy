@@ -260,7 +260,7 @@ def convert_openai_messages_to_anthropic(openai_messages: List[Dict[str, Any]]) 
                     content_block["text"] = text.rstrip()
                     logger.debug("Removed trailing whitespace from final assistant message")
 
-    logger.debug(f"[MESSAGE_CONVERSION] Final result: {len(anthropic_messages)} Anthropic messages, {len(system_message_blocks)} system blocks")
+    logger.debug(f"[MESSAGE_CONVERSION] Final result: {len(anthropic_messages)} Anthropic messages, {len(system_message_blocks) if system_message_blocks else 0} system blocks")
 
     # Return system blocks as array (or None if empty) to preserve structure
     return anthropic_messages, system_message_blocks if system_message_blocks else None
