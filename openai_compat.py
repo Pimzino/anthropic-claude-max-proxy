@@ -691,15 +691,22 @@ def map_stop_reason_to_finish_reason(stop_reason: Optional[str]) -> str:
     return mapping.get(stop_reason, "stop")
 
 
-def convert_anthropic_content_to_openai(content: List[Dict[str, Any]]) -> tuple[Optional[str], Optional[List[Dict[str, Any]]]]:
+def convert_anthropic_content_to_openai(content: List[Dict[str, Any]]) -> tuple[
+    Optional[str],
+    Optional[List[Dict[str, Any]]],
+    Optional[str],
+    Optional[List[Dict[str, Any]]]
+]:
     """
-    Convert Anthropic content blocks to OpenAI message content and tool_calls.
+    Convert Anthropic content blocks to OpenAI message content, tool_calls, and reasoning.
 
     Returns:
-        tuple: (text_content, tool_calls)
+        tuple: (text_content, tool_calls, reasoning_content, thinking_blocks)
     """
     text_parts = []
     tool_calls = []
+    thinking_blocks = []
+    reasoning_parts = []
 
     for block in content:
         block_type = block.get("type")
@@ -717,10 +724,24 @@ def convert_anthropic_content_to_openai(content: List[Dict[str, Any]]) -> tuple[
                 }
             })
 
+        elif block_type == "thinking" or block.get("thinking") is not None:
+            # Extract thinking block (contains reasoning process)
+            thinking_blocks.append(block)
+            thinking_text = block.get("thinking", "")
+            if thinking_text:
+                reasoning_parts.append(thinking_text)
+
+        elif block_type == "redacted_thinking":
+            # Extract redacted thinking (no text content, but still a thinking block)
+            thinking_blocks.append(block)
+            # Note: redacted_thinking doesn't have text, so we don't add to reasoning_parts
+
     text_content = "".join(text_parts) if text_parts else None
     tool_calls_result = tool_calls if tool_calls else None
+    reasoning_content = "".join(reasoning_parts) if reasoning_parts else None
+    thinking_blocks_result = thinking_blocks if thinking_blocks else None
 
-    return text_content, tool_calls_result
+    return text_content, tool_calls_result, reasoning_content, thinking_blocks_result
 
 
 def convert_anthropic_response_to_openai(anthropic_response: Dict[str, Any], model: str) -> Dict[str, Any]:
@@ -734,9 +755,9 @@ def convert_anthropic_response_to_openai(anthropic_response: Dict[str, Any], mod
     Returns:
         OpenAI chat completion response
     """
-    # Extract content
+    # Extract content with thinking/reasoning
     content = anthropic_response.get("content", [])
-    text_content, tool_calls = convert_anthropic_content_to_openai(content)
+    text_content, tool_calls, reasoning_content, thinking_blocks = convert_anthropic_content_to_openai(content)
 
     # Build message
     message = {
@@ -749,6 +770,31 @@ def convert_anthropic_response_to_openai(anthropic_response: Dict[str, Any], mod
 
     # Map stop reason
     finish_reason = map_stop_reason_to_finish_reason(anthropic_response.get("stop_reason"))
+
+    # Calculate usage with reasoning tokens
+    usage_obj = anthropic_response.get("usage", {})
+    prompt_tokens = usage_obj.get("input_tokens", 0)
+    completion_tokens = usage_obj.get("output_tokens", 0)
+
+    usage = {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": prompt_tokens + completion_tokens
+    }
+
+    # Add reasoning tokens if thinking content exists
+    # Note: Anthropic's output_tokens already includes thinking tokens
+    # We report them separately in completion_tokens_details for transparency
+    if reasoning_content:
+        # Estimate reasoning tokens (4 characters per token is a rough estimate)
+        # For more accuracy, could use tiktoken: len(tiktoken.get_encoding("cl100k_base").encode(reasoning_content))
+        reasoning_tokens = len(reasoning_content) // 4
+
+        usage["completion_tokens_details"] = {
+            "reasoning_tokens": reasoning_tokens
+        }
+
+        logger.debug(f"Extracted reasoning content: {len(reasoning_content)} chars, ~{reasoning_tokens} tokens")
 
     # Build OpenAI response
     openai_response = {
@@ -763,14 +809,7 @@ def convert_anthropic_response_to_openai(anthropic_response: Dict[str, Any], mod
                 "finish_reason": finish_reason
             }
         ],
-        "usage": {
-            "prompt_tokens": anthropic_response.get("usage", {}).get("input_tokens", 0),
-            "completion_tokens": anthropic_response.get("usage", {}).get("output_tokens", 0),
-            "total_tokens": (
-                anthropic_response.get("usage", {}).get("input_tokens", 0) +
-                anthropic_response.get("usage", {}).get("output_tokens", 0)
-            )
-        }
+        "usage": usage
     }
 
     return openai_response
