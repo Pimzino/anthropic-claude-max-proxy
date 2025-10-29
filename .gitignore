@@ -49,9 +49,6 @@ config.json
 !package.json
 !package-lock.json
 
-# Logs
-*.log
-
 # Environment variables
 .env
 .env.local
@@ -63,3 +60,5 @@ venv
 # Development notes
 notes.md
 dev-code
+
+*.log
