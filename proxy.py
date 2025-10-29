@@ -320,6 +320,50 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
     start_time = time.time()
 
     logger.info(f"[{request_id}] ===== NEW OPENAI CHAT COMPLETION REQUEST =====")
+
+    # Log the raw request data with full detail
+    request_dict = request.model_dump()
+    logger.debug(f"[{request_id}] ===== RAW CLIENT REQUEST (FULL DETAIL) =====")
+    logger.debug(f"[{request_id}] Model: {request_dict.get('model')}")
+    logger.debug(f"[{request_id}] Stream: {request_dict.get('stream')}")
+    logger.debug(f"[{request_id}] Max tokens: {request_dict.get('max_tokens')}")
+    logger.debug(f"[{request_id}] Temperature: {request_dict.get('temperature')}")
+
+    # Log messages in detail
+    messages = request_dict.get('messages', [])
+    logger.debug(f"[{request_id}] Messages ({len(messages)} total):")
+    for idx, msg in enumerate(messages):
+        logger.debug(f"[{request_id}]   Message #{idx}: role={msg.get('role')}, content_type={type(msg.get('content'))}")
+        if isinstance(msg.get('content'), str):
+            content_preview = msg.get('content', '')[:200]
+            logger.debug(f"[{request_id}]     Content (preview): {content_preview}...")
+        elif isinstance(msg.get('content'), list):
+            logger.debug(f"[{request_id}]     Content (array with {len(msg.get('content', []))} items): {json.dumps(msg.get('content'), indent=2)}")
+
+        # Log tool_calls if present
+        if 'tool_calls' in msg:
+            logger.debug(f"[{request_id}]     Tool calls: {json.dumps(msg['tool_calls'], indent=2)}")
+
+        # Log tool_call_id if present (for tool result messages)
+        if 'tool_call_id' in msg:
+            logger.debug(f"[{request_id}]     Tool call ID: {msg['tool_call_id']}")
+
+    # Log tools in detail
+    if 'tools' in request_dict and request_dict['tools']:
+        logger.debug(f"[{request_id}] Tools ({len(request_dict['tools'])} total):")
+        for idx, tool in enumerate(request_dict['tools']):
+            logger.debug(f"[{request_id}]   Tool #{idx}: {json.dumps(tool, indent=2)}")
+    else:
+        logger.debug(f"[{request_id}] No tools in request")
+
+    # Log tool_choice if present
+    if 'tool_choice' in request_dict:
+        logger.debug(f"[{request_id}] Tool choice: {json.dumps(request_dict['tool_choice'], indent=2)}")
+
+    # Log full request as JSON for complete reference
+    logger.debug(f"[{request_id}] Full request JSON: {json.dumps(request_dict, indent=2)}")
+    logger.debug(f"[{request_id}] ===== END RAW CLIENT REQUEST =====")
+
     logger.debug(f"[{request_id}] OpenAI Request: {request.model_dump()}")
 
     # Log HTTP headers to see if client is sending anthropic-beta

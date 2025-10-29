@@ -111,12 +111,16 @@ def convert_openai_messages_to_anthropic(openai_messages: List[Dict[str, Any]]) 
     Returns:
         tuple: (anthropic_messages, system_message_blocks)
     """
+    logger.debug(f"[MESSAGE_CONVERSION] Converting {len(openai_messages)} OpenAI messages to Anthropic format")
+    logger.debug(f"[MESSAGE_CONVERSION] Raw OpenAI messages: {json.dumps(openai_messages, indent=2)}")
+
     # Extract system messages first (they're sent separately in Anthropic API)
     system_message_blocks: List[Dict[str, Any]] = []
     non_system_messages: List[Dict[str, Any]] = []
 
     for msg in openai_messages:
         if msg.get("role") == "system":
+            logger.debug(f"[MESSAGE_CONVERSION] Found system message: {json.dumps(msg, indent=2)}")
             # Preserve system message structure for cache_control support
             content = msg.get("content")
             if isinstance(content, str):
@@ -136,6 +140,8 @@ def convert_openai_messages_to_anthropic(openai_messages: List[Dict[str, Any]]) 
                         system_message_blocks.append(block)
         else:
             non_system_messages.append(msg)
+
+    logger.debug(f"[MESSAGE_CONVERSION] Extracted {len(system_message_blocks)} system blocks, {len(non_system_messages)} non-system messages")
 
     # Now process non-system messages with role alternation
     anthropic_messages: List[Dict[str, Any]] = []
@@ -166,6 +172,8 @@ def convert_openai_messages_to_anthropic(openai_messages: List[Dict[str, Any]]) 
                 tool_use_id = msg.get("tool_call_id", "")
                 tool_result_content = content if isinstance(content, str) else json.dumps(content)
 
+                logger.debug(f"[MESSAGE_CONVERSION] Converting tool message: tool_call_id={tool_use_id}, content={tool_result_content[:100]}...")
+
                 tool_result_block = {
                     "type": "tool_result",
                     "tool_use_id": tool_use_id,
@@ -178,6 +186,8 @@ def convert_openai_messages_to_anthropic(openai_messages: List[Dict[str, Any]]) 
                 function_name = msg.get("name", "")
                 function_content = content if isinstance(content, str) else json.dumps(content)
 
+                logger.debug(f"[MESSAGE_CONVERSION] Converting function message (legacy): name={function_name}, content={function_content[:100]}...")
+
                 tool_result_block = {
                     "type": "tool_result",
                     "tool_use_id": f"func_{function_name}",
@@ -189,6 +199,7 @@ def convert_openai_messages_to_anthropic(openai_messages: List[Dict[str, Any]]) 
 
         # Add merged user message if we have content
         if user_content:
+            logger.debug(f"[MESSAGE_CONVERSION] Adding merged user message with {len(user_content)} content blocks")
             anthropic_messages.append({
                 "role": "user",
                 "content": user_content
@@ -211,11 +222,13 @@ def convert_openai_messages_to_anthropic(openai_messages: List[Dict[str, Any]]) 
 
             # Handle tool calls in assistant messages
             if "tool_calls" in msg and msg["tool_calls"]:
+                logger.debug(f"[MESSAGE_CONVERSION] Assistant message has {len(msg['tool_calls'])} tool_calls")
                 tool_use_blocks = convert_openai_tool_calls_to_anthropic(msg["tool_calls"])
                 assistant_content.extend(tool_use_blocks)
 
             # Handle function calls (legacy OpenAI format)
             if "function_call" in msg and msg["function_call"]:
+                logger.debug(f"[MESSAGE_CONVERSION] Assistant message has function_call (legacy): {msg['function_call']}")
                 function_blocks = convert_openai_function_call_to_anthropic(msg["function_call"])
                 assistant_content.extend(function_blocks)
 
@@ -223,6 +236,7 @@ def convert_openai_messages_to_anthropic(openai_messages: List[Dict[str, Any]]) 
 
         # Add merged assistant message if we have content
         if assistant_content:
+            logger.debug(f"[MESSAGE_CONVERSION] Adding merged assistant message with {len(assistant_content)} content blocks")
             anthropic_messages.append({
                 "role": "assistant",
                 "content": assistant_content
@@ -245,6 +259,8 @@ def convert_openai_messages_to_anthropic(openai_messages: List[Dict[str, Any]]) 
                 if text != text.rstrip():
                     content_block["text"] = text.rstrip()
                     logger.debug("Removed trailing whitespace from final assistant message")
+
+    logger.debug(f"[MESSAGE_CONVERSION] Final result: {len(anthropic_messages)} Anthropic messages, {len(system_message_blocks)} system blocks")
 
     # Return system blocks as array (or None if empty) to preserve structure
     return anthropic_messages, system_message_blocks if system_message_blocks else None
@@ -418,17 +434,41 @@ def _ensure_thinking_prefix(messages: List[Dict[str, Any]]) -> List[Dict[str, An
 
 def convert_openai_tool_calls_to_anthropic(tool_calls: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Convert OpenAI tool_calls to Anthropic tool_use content blocks."""
+    logger.debug(f"[TOOL_CONVERSION] Converting {len(tool_calls)} OpenAI tool_calls to Anthropic format")
+    logger.debug(f"[TOOL_CONVERSION] Raw OpenAI tool_calls: {json.dumps(tool_calls, indent=2)}")
+
     anthropic_content = []
 
-    for tool_call in tool_calls:
-        function = tool_call.get("function", {})
-        anthropic_content.append({
-            "type": "tool_use",
-            "id": tool_call.get("id", ""),
-            "name": function.get("name", ""),
-            "input": json.loads(function.get("arguments", "{}"))
-        })
+    for idx, tool_call in enumerate(tool_calls):
+        logger.debug(f"[TOOL_CONVERSION] Processing tool_call #{idx}: {json.dumps(tool_call, indent=2)}")
 
+        function = tool_call.get("function", {})
+        tool_id = tool_call.get("id", "")
+        function_name = function.get("name", "")
+        arguments_str = function.get("arguments", "{}")
+
+        logger.debug(f"[TOOL_CONVERSION]   - Tool ID: {tool_id}")
+        logger.debug(f"[TOOL_CONVERSION]   - Function name: {function_name}")
+        logger.debug(f"[TOOL_CONVERSION]   - Arguments (raw string): {arguments_str}")
+
+        try:
+            parsed_input = json.loads(arguments_str)
+            logger.debug(f"[TOOL_CONVERSION]   - Parsed input: {json.dumps(parsed_input, indent=2)}")
+        except json.JSONDecodeError as e:
+            logger.error(f"[TOOL_CONVERSION]   - ERROR: Failed to parse arguments JSON: {e}")
+            parsed_input = {}
+
+        anthropic_block = {
+            "type": "tool_use",
+            "id": tool_id,
+            "name": function_name,
+            "input": parsed_input
+        }
+
+        logger.debug(f"[TOOL_CONVERSION]   - Converted to Anthropic block: {json.dumps(anthropic_block, indent=2)}")
+        anthropic_content.append(anthropic_block)
+
+    logger.debug(f"[TOOL_CONVERSION] Final Anthropic tool_use blocks: {json.dumps(anthropic_content, indent=2)}")
     return anthropic_content
 
 
@@ -445,25 +485,46 @@ def convert_openai_function_call_to_anthropic(function_call: Dict[str, Any]) -> 
 def convert_openai_tools_to_anthropic(openai_tools: Optional[List[Dict[str, Any]]]) -> Optional[List[Dict[str, Any]]]:
     """Convert OpenAI tools/functions to Anthropic tools format."""
     if not openai_tools:
+        logger.debug("[TOOLS_SCHEMA] No tools to convert")
         return None
+
+    logger.debug(f"[TOOLS_SCHEMA] Converting {len(openai_tools)} OpenAI tools to Anthropic format")
+    logger.debug(f"[TOOLS_SCHEMA] Raw OpenAI tools: {json.dumps(openai_tools, indent=2)}")
 
     anthropic_tools = []
 
-    for tool in openai_tools:
+    for idx, tool in enumerate(openai_tools):
+        logger.debug(f"[TOOLS_SCHEMA] Processing tool #{idx}: {json.dumps(tool, indent=2)}")
+
         # Check if it's already in Anthropic format (Cursor sends this)
         if "name" in tool and "description" in tool and "type" not in tool:
             # Already Anthropic format, pass through
+            logger.debug(f"[TOOLS_SCHEMA]   - Tool already in Anthropic format: {tool.get('name')}")
             anthropic_tools.append(tool)
-            logger.debug(f"Tool already in Anthropic format: {tool.get('name')}")
         elif tool.get("type") == "function":
             # Standard OpenAI format
             function = tool.get("function", {})
-            anthropic_tools.append({
-                "name": function.get("name", ""),
-                "description": function.get("description", ""),
-                "input_schema": function.get("parameters", {})
-            })
+            tool_name = function.get("name", "")
+            tool_description = function.get("description", "")
+            tool_parameters = function.get("parameters", {})
 
+            logger.debug(f"[TOOLS_SCHEMA]   - Converting OpenAI function tool")
+            logger.debug(f"[TOOLS_SCHEMA]     - Name: {tool_name}")
+            logger.debug(f"[TOOLS_SCHEMA]     - Description: {tool_description}")
+            logger.debug(f"[TOOLS_SCHEMA]     - Parameters schema: {json.dumps(tool_parameters, indent=2)}")
+
+            anthropic_tool = {
+                "name": tool_name,
+                "description": tool_description,
+                "input_schema": tool_parameters
+            }
+
+            logger.debug(f"[TOOLS_SCHEMA]   - Converted to Anthropic tool: {json.dumps(anthropic_tool, indent=2)}")
+            anthropic_tools.append(anthropic_tool)
+        else:
+            logger.warning(f"[TOOLS_SCHEMA]   - Unknown tool format (skipping): {json.dumps(tool, indent=2)}")
+
+    logger.debug(f"[TOOLS_SCHEMA] Final Anthropic tools: {json.dumps(anthropic_tools, indent=2)}")
     return anthropic_tools if anthropic_tools else None
 
 
@@ -494,12 +555,20 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
     Returns:
         Anthropic messages request
     """
+    logger.debug("[REQUEST_CONVERSION] ===== STARTING OPENAI TO ANTHROPIC CONVERSION =====")
+    logger.debug(f"[REQUEST_CONVERSION] Full OpenAI request: {json.dumps(openai_request, indent=2)}")
+
     # Convert messages
     messages, system_blocks = convert_openai_messages_to_anthropic(openai_request.get("messages", []))
+
+    logger.debug(f"[REQUEST_CONVERSION] Converted messages ({len(messages)} messages): {json.dumps(messages, indent=2)}")
+    logger.debug(f"[REQUEST_CONVERSION] System blocks: {json.dumps(system_blocks, indent=2) if system_blocks else 'None'}")
 
     # Parse model name for reasoning and 1M context variants
     model_name = openai_request.get("model", "claude-sonnet-4-5-20250929")
     base_model, model_reasoning_level, use_1m_context = resolve_model_metadata(model_name)
+
+    logger.debug(f"[REQUEST_CONVERSION] Model resolution: {model_name} -> base={base_model}, reasoning={model_reasoning_level}, 1m_context={use_1m_context}")
 
     # Build Anthropic request (use base model name, without variant suffixes)
     anthropic_request = {
@@ -536,39 +605,55 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
 
     # Convert tools
     if "tools" in openai_request:
+        logger.debug(f"[REQUEST_CONVERSION] Found 'tools' field in OpenAI request with {len(openai_request['tools'])} tools")
         tools = convert_openai_tools_to_anthropic(openai_request["tools"])
         if tools:
             anthropic_request["tools"] = tools
+            logger.debug(f"[REQUEST_CONVERSION] Added {len(tools)} tools to Anthropic request")
+        else:
+            logger.debug("[REQUEST_CONVERSION] No tools after conversion (empty result)")
 
     # Convert functions (legacy)
     if "functions" in openai_request:
+        logger.debug(f"[REQUEST_CONVERSION] Found 'functions' field (legacy) in OpenAI request with {len(openai_request['functions'])} functions")
         tools = convert_openai_functions_to_anthropic(openai_request["functions"])
         if tools:
             anthropic_request["tools"] = tools
+            logger.debug(f"[REQUEST_CONVERSION] Added {len(tools)} tools (from functions) to Anthropic request")
 
     # Handle tool_choice
     if "tool_choice" in openai_request:
         tool_choice = openai_request["tool_choice"]
+        logger.debug(f"[REQUEST_CONVERSION] Processing tool_choice: {json.dumps(tool_choice, indent=2)}")
+
         if tool_choice == "none":
             # Don't include tools
+            logger.debug("[REQUEST_CONVERSION] tool_choice='none' - removing tools from request")
             anthropic_request.pop("tools", None)
         elif tool_choice == "auto":
             # Default Anthropic behavior
+            logger.debug("[REQUEST_CONVERSION] tool_choice='auto' - using default Anthropic behavior")
             pass
         elif isinstance(tool_choice, dict):
             # Handle dict format (Cursor sends {'type': 'auto'})
             choice_type = tool_choice.get("type")
+            logger.debug(f"[REQUEST_CONVERSION] tool_choice is dict with type='{choice_type}'")
+
             if choice_type == "auto" or choice_type is None:
                 # Auto mode - default Anthropic behavior
+                logger.debug("[REQUEST_CONVERSION] tool_choice type is 'auto' or None - using default behavior")
                 pass
             elif choice_type == "function":
                 # Specific tool
                 function_name = tool_choice.get("function", {}).get("name")
+                logger.debug(f"[REQUEST_CONVERSION] tool_choice type is 'function' with name='{function_name}'")
+
                 if function_name:
                     anthropic_request["tool_choice"] = {
                         "type": "tool",
                         "name": function_name
                     }
+                    logger.debug(f"[REQUEST_CONVERSION] Set Anthropic tool_choice to force tool: {function_name}")
 
     # Handle function_call (legacy)
     if "function_call" in openai_request:
@@ -677,6 +762,10 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
                 f"max_tokens: {anthropic_request['max_tokens']}"
             )
 
+    logger.debug("[REQUEST_CONVERSION] ===== FINAL ANTHROPIC REQUEST =====")
+    logger.debug(f"[REQUEST_CONVERSION] {json.dumps(anthropic_request, indent=2)}")
+    logger.debug("[REQUEST_CONVERSION] ===== END CONVERSION =====")
+
     return anthropic_request
 
 
@@ -703,36 +792,56 @@ def convert_anthropic_content_to_openai(content: List[Dict[str, Any]]) -> tuple[
     Returns:
         tuple: (text_content, tool_calls, reasoning_content, thinking_blocks)
     """
+    logger.debug(f"[RESPONSE_CONVERSION] Converting {len(content)} Anthropic content blocks to OpenAI format")
+    logger.debug(f"[RESPONSE_CONVERSION] Raw Anthropic content: {json.dumps(content, indent=2)}")
+
     text_parts = []
     tool_calls = []
     thinking_blocks = []
     reasoning_parts = []
 
-    for block in content:
+    for idx, block in enumerate(content):
         block_type = block.get("type")
+        logger.debug(f"[RESPONSE_CONVERSION] Processing block #{idx}: type={block_type}")
 
         if block_type == "text":
-            text_parts.append(block.get("text", ""))
+            text = block.get("text", "")
+            logger.debug(f"[RESPONSE_CONVERSION]   - Text block: {text[:100]}...")
+            text_parts.append(text)
 
         elif block_type == "tool_use":
-            tool_calls.append({
-                "id": block.get("id", ""),
+            tool_id = block.get("id", "")
+            tool_name = block.get("name", "")
+            tool_input = block.get("input", {})
+
+            logger.debug(f"[RESPONSE_CONVERSION]   - Tool use block:")
+            logger.debug(f"[RESPONSE_CONVERSION]     - ID: {tool_id}")
+            logger.debug(f"[RESPONSE_CONVERSION]     - Name: {tool_name}")
+            logger.debug(f"[RESPONSE_CONVERSION]     - Input: {json.dumps(tool_input, indent=2)}")
+
+            openai_tool_call = {
+                "id": tool_id,
                 "type": "function",
                 "function": {
-                    "name": block.get("name", ""),
-                    "arguments": json.dumps(block.get("input", {}))
+                    "name": tool_name,
+                    "arguments": json.dumps(tool_input)
                 }
-            })
+            }
+
+            logger.debug(f"[RESPONSE_CONVERSION]     - Converted to OpenAI tool_call: {json.dumps(openai_tool_call, indent=2)}")
+            tool_calls.append(openai_tool_call)
 
         elif block_type == "thinking" or block.get("thinking") is not None:
             # Extract thinking block (contains reasoning process)
-            thinking_blocks.append(block)
             thinking_text = block.get("thinking", "")
+            logger.debug(f"[RESPONSE_CONVERSION]   - Thinking block: {thinking_text[:100]}...")
+            thinking_blocks.append(block)
             if thinking_text:
                 reasoning_parts.append(thinking_text)
 
         elif block_type == "redacted_thinking":
             # Extract redacted thinking (no text content, but still a thinking block)
+            logger.debug(f"[RESPONSE_CONVERSION]   - Redacted thinking block")
             thinking_blocks.append(block)
             # Note: redacted_thinking doesn't have text, so we don't add to reasoning_parts
 
@@ -740,6 +849,11 @@ def convert_anthropic_content_to_openai(content: List[Dict[str, Any]]) -> tuple[
     tool_calls_result = tool_calls if tool_calls else None
     reasoning_content = "".join(reasoning_parts) if reasoning_parts else None
     thinking_blocks_result = thinking_blocks if thinking_blocks else None
+
+    logger.debug(f"[RESPONSE_CONVERSION] Conversion result:")
+    logger.debug(f"[RESPONSE_CONVERSION]   - Text content: {text_content[:100] if text_content else 'None'}...")
+    logger.debug(f"[RESPONSE_CONVERSION]   - Tool calls: {len(tool_calls_result) if tool_calls_result else 0}")
+    logger.debug(f"[RESPONSE_CONVERSION]   - Reasoning content: {len(reasoning_content) if reasoning_content else 0} chars")
 
     return text_content, tool_calls_result, reasoning_content, thinking_blocks_result
 
@@ -755,6 +869,9 @@ def convert_anthropic_response_to_openai(anthropic_response: Dict[str, Any], mod
     Returns:
         OpenAI chat completion response
     """
+    logger.debug("[RESPONSE_CONVERSION] ===== CONVERTING ANTHROPIC RESPONSE TO OPENAI =====")
+    logger.debug(f"[RESPONSE_CONVERSION] Full Anthropic response: {json.dumps(anthropic_response, indent=2)}")
+
     # Extract content with thinking/reasoning
     content = anthropic_response.get("content", [])
     text_content, tool_calls, reasoning_content, thinking_blocks = convert_anthropic_content_to_openai(content)
@@ -811,6 +928,9 @@ def convert_anthropic_response_to_openai(anthropic_response: Dict[str, Any], mod
         ],
         "usage": usage
     }
+
+    logger.debug(f"[RESPONSE_CONVERSION] Final OpenAI response: {json.dumps(openai_response, indent=2)}")
+    logger.debug("[RESPONSE_CONVERSION] ===== END RESPONSE CONVERSION =====")
 
     return openai_response
 
@@ -937,6 +1057,9 @@ async def convert_anthropic_stream_to_openai(
                             logger.warning(f"[{request_id}] Tool use block missing index: {data}")
                             continue
 
+                        logger.debug(f"[{request_id}] [STREAM_TOOL] Starting tool_use block at index {sse_index}")
+                        logger.debug(f"[{request_id}] [STREAM_TOOL] Content block: {json.dumps(content_block, indent=2)}")
+
                         call_state = {
                             "openai_index": next_tool_index,
                             "id": content_block.get("id", ""),
@@ -945,6 +1068,8 @@ async def convert_anthropic_stream_to_openai(
                         }
                         tool_call_states[sse_index] = call_state
                         next_tool_index += 1
+
+                        logger.debug(f"[{request_id}] [STREAM_TOOL] Created call_state: {json.dumps(call_state, indent=2)}")
 
                         delta_chunk = {
                             "id": completion_id,
@@ -971,6 +1096,8 @@ async def convert_anthropic_stream_to_openai(
                                 }
                             ]
                         }
+
+                        logger.debug(f"[{request_id}] [STREAM_TOOL] Emitting initial tool_call delta: {json.dumps(delta_chunk, indent=2)}")
                         yield emit(delta_chunk)
                         # Track tool_use ids for this assistant message
                         tool_id = content_block.get("id")
@@ -1028,6 +1155,9 @@ async def convert_anthropic_stream_to_openai(
 
                         partial_json = delta.get("partial_json", "")
                         call_state["arguments"] += partial_json
+
+                        logger.debug(f"[{request_id}] [STREAM_TOOL] Received input_json_delta for index {sse_index}: {partial_json[:100]}...")
+                        logger.debug(f"[{request_id}] [STREAM_TOOL] Accumulated arguments so far: {call_state['arguments'][:200]}...")
 
                         delta_chunk = {
                             "id": completion_id,
