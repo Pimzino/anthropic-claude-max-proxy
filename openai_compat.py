@@ -749,34 +749,16 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
     if reasoning_level and reasoning_level in REASONING_BUDGET_MAP:
         thinking_budget = REASONING_BUDGET_MAP[reasoning_level]
 
-        # If the LAST assistant message contains tool_use blocks but does not begin
-        # with a signed thinking block, prepend an empty thinking block so Anthropic
-        # can continue with thinking enabled.
-        last_assistant_has_tools = _last_assistant_has_tool_use(anthropic_request["messages"]) if anthropic_request.get("messages") else False
-        last_assistant_has_thinking = _last_assistant_starts_with_thinking(anthropic_request["messages"]) if anthropic_request.get("messages") else False
-
-        if last_assistant_has_tools and not last_assistant_has_thinking:
-            logger.debug(
-                "Last assistant has tools but no thinking block; prepending empty thinking block "
-                "to allow thinking to continue."
-            )
-            # Find and update the last assistant message
-            msgs = anthropic_request.get("messages", [])
-            for i in range(len(msgs) - 1, -1, -1):
-                if msgs[i].get("role") == "assistant":
-                    content = msgs[i].get("content", [])
-                    if isinstance(content, list):
-                        # Prepend empty thinking block
-                        msgs[i]["content"] = [{"type": "thinking", "thinking": ""}] + content
-                        anthropic_request["messages"] = msgs
-                        logger.debug("Prepended empty thinking block to last assistant message")
-                    break
-
         # Always enable thinking if reasoning level is specified
+        # Note: Claude decides whether to actually use thinking based on task complexity
+        # If Claude didn't generate thinking blocks in a previous response, that's fine -
+        # we don't need to (and shouldn't) create fake ones
         anthropic_request["thinking"] = {
             "type": "enabled",
             "budget_tokens": thinking_budget
         }
+
+        logger.debug(f"Enabled thinking with budget {thinking_budget} tokens (reasoning_effort: {reasoning_level})")
 
         # Ensure max_tokens is sufficient for thinking + response
         # Reserve at least 1024 tokens for the actual response content
