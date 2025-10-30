@@ -750,22 +750,33 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
         thinking_budget = REASONING_BUDGET_MAP[reasoning_level]
 
         # If the LAST assistant message contains tool_use blocks but does not begin
-        # with a signed thinking block, Anthropic will reject the request.
-        # In that case, fall back to disabling thinking for this call.
+        # with a signed thinking block, prepend an empty thinking block so Anthropic
+        # can continue with thinking enabled.
         last_assistant_has_tools = _last_assistant_has_tool_use(anthropic_request["messages"]) if anthropic_request.get("messages") else False
         last_assistant_has_thinking = _last_assistant_starts_with_thinking(anthropic_request["messages"]) if anthropic_request.get("messages") else False
 
         if last_assistant_has_tools and not last_assistant_has_thinking:
-            logger.warning(
-                "Thinking requested but missing signed thinking block on last assistant with tools; "
-                "disabling thinking for this request to satisfy Anthropic requirements."
+            logger.debug(
+                "Last assistant has tools but no thinking block; prepending empty thinking block "
+                "to allow thinking to continue."
             )
-        else:
-            # Safe to enable thinking
-            anthropic_request["thinking"] = {
-                "type": "enabled",
-                "budget_tokens": thinking_budget
-            }
+            # Find and update the last assistant message
+            msgs = anthropic_request.get("messages", [])
+            for i in range(len(msgs) - 1, -1, -1):
+                if msgs[i].get("role") == "assistant":
+                    content = msgs[i].get("content", [])
+                    if isinstance(content, list):
+                        # Prepend empty thinking block
+                        msgs[i]["content"] = [{"type": "thinking", "thinking": ""}] + content
+                        anthropic_request["messages"] = msgs
+                        logger.debug("Prepended empty thinking block to last assistant message")
+                    break
+
+        # Always enable thinking if reasoning level is specified
+        anthropic_request["thinking"] = {
+            "type": "enabled",
+            "budget_tokens": thinking_budget
+        }
 
         # Ensure max_tokens is sufficient for thinking + response
         # Reserve at least 1024 tokens for the actual response content
