@@ -760,26 +760,18 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
         last_assistant_has_thinking = _last_assistant_starts_with_thinking(anthropic_request["messages"]) if anthropic_request.get("messages") else False
 
         if last_assistant_has_tools and not last_assistant_has_thinking:
-            # Remove the problematic assistant message from history
-            # Since it has no thinking block, we can't satisfy Anthropic's requirement
-            # The tool results are in user messages, so we don't lose important context
-            msgs = anthropic_request.get("messages", [])
-            for i in range(len(msgs) - 1, -1, -1):
-                if msgs[i].get("role") == "assistant":
-                    logger.debug(
-                        f"Removing last assistant message (has tool_use but no thinking block). "
-                        f"This allows us to enable thinking without violating Anthropic's requirements."
-                    )
-                    del msgs[i]
-                    anthropic_request["messages"] = msgs
-                    break
-
-        # Always enable thinking now (we removed any problematic assistant messages)
-        anthropic_request["thinking"] = {
-            "type": "enabled",
-            "budget_tokens": thinking_budget
-        }
-        logger.debug(f"Enabled thinking with budget {thinking_budget} tokens (reasoning_effort: {reasoning_level})")
+            # Do NOT remove messages; that breaks tool_result -> tool_use linking
+            # Instead, disable thinking for this turn to satisfy Anthropic requirements
+            logger.warning(
+                "Thinking requested, but last assistant has tool_use and no thinking; "
+                "disabling thinking for this turn to preserve tool linkage."
+            )
+        else:
+            anthropic_request["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": thinking_budget
+            }
+            logger.debug(f"Enabled thinking with budget {thinking_budget} tokens (reasoning_effort: {reasoning_level})")
 
         # Ensure max_tokens is sufficient for thinking + response
         # Reserve at least 1024 tokens for the actual response content
