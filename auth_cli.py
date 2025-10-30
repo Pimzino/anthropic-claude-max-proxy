@@ -166,3 +166,95 @@ class CLIAuthFlow:
             if hasattr(__main__, '_proxy_debug_logger'):
                 __main__._proxy_debug_logger.debug(f"[AUTH] Token refresh failed with exception: {e}")
             return False
+
+    async def setup_long_term_token(self) -> Optional[str]:
+        """
+        Run the OAuth authentication flow to get a long-term token (1 year)
+        Returns the access token if successful, None otherwise
+        """
+        # Log authentication start
+        if hasattr(__main__, '_proxy_debug_logger'):
+            __main__._proxy_debug_logger.debug("[AUTH] Starting long-term token setup flow")
+
+        try:
+            # Step 1: Generate auth URL and open browser
+            console.print("\n[bold]Step 1:[/bold] Opening browser for authentication...")
+            auth_url = self.oauth.get_authorize_url()
+
+            if hasattr(__main__, '_proxy_debug_logger'):
+                __main__._proxy_debug_logger.debug(f"[AUTH] Generated auth URL: {auth_url[:50]}...")
+
+            # Try to open browser
+            if webbrowser.open(auth_url):
+                console.print("[green][OK][/green] Browser opened successfully")
+                if hasattr(__main__, '_proxy_debug_logger'):
+                    __main__._proxy_debug_logger.debug("[AUTH] Browser opened successfully")
+            else:
+                console.print("[yellow]Could not open browser automatically[/yellow]")
+                console.print(f"Please open this URL manually:\n{auth_url}")
+                if hasattr(__main__, '_proxy_debug_logger'):
+                    __main__._proxy_debug_logger.debug("[AUTH] Could not open browser automatically")
+
+            # Step 2: Instructions
+            console.print("\n[bold]Step 2:[/bold] Complete the login process in your browser")
+            console.print("  1. Login to your Claude Pro/Max account if prompted")
+            console.print("  2. Authorize the application")
+            console.print("  3. You will see an authorization code on the Anthropic page")
+
+            # Step 3: Get code from user
+            console.print("\n[bold]Step 3:[/bold] Paste the authorization code below")
+            console.print("[dim]The code should look like: CODE#STATE[/dim]\n")
+
+            if hasattr(__main__, '_proxy_debug_logger'):
+                __main__._proxy_debug_logger.debug("[AUTH] Waiting for user to enter authorization code")
+
+            # Use simple input to avoid event loop conflicts
+            try:
+                code = input("Authorization code: ")
+                if hasattr(__main__, '_proxy_debug_logger'):
+                    __main__._proxy_debug_logger.debug(f"[AUTH] User entered code (length: {len(code.strip()) if code else 0})")
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Authentication cancelled by user[/yellow]")
+                if hasattr(__main__, '_proxy_debug_logger'):
+                    __main__._proxy_debug_logger.debug("[AUTH] Authentication cancelled by user (KeyboardInterrupt)")
+                return None
+
+            if not code or len(code.strip()) < 10:
+                console.print("[red]Invalid or missing code. Please paste the complete code from the browser.[/red]")
+                if hasattr(__main__, '_proxy_debug_logger'):
+                    __main__._proxy_debug_logger.debug("[AUTH] Invalid or missing authorization code")
+                return None
+
+            # Step 4: Exchange code for long-term token
+            console.print("\n[bold]Step 4:[/bold] Exchanging code for long-term token (1 year validity)...")
+            if hasattr(__main__, '_proxy_debug_logger'):
+                __main__._proxy_debug_logger.debug("[AUTH] Exchanging authorization code for long-term token")
+
+            result = await self.oauth.exchange_code_for_long_term_token(code.strip())
+
+            if result and result.get("status") == "success":
+                console.print("[green][OK][/green] Long-term token obtained successfully!")
+                console.print(f"[dim]Token valid for {result.get('expires_in', 31536000) // 86400} days[/dim]")
+                if hasattr(__main__, '_proxy_debug_logger'):
+                    __main__._proxy_debug_logger.debug("[AUTH] Long-term OAuth token obtained successfully")
+
+                return result.get("access_token")
+            else:
+                console.print("[red][ERROR][/red] Failed to exchange code for long-term token")
+                if hasattr(__main__, '_proxy_debug_logger'):
+                    __main__._proxy_debug_logger.debug(f"[AUTH] Failed to exchange code for long-term token: {result}")
+                return None
+
+        except Exception as e:
+            console.print(f"[red][ERROR][/red] Long-term token setup failed: {e}")
+            if hasattr(__main__, '_proxy_debug_logger'):
+                __main__._proxy_debug_logger.debug(f"[AUTH] Long-term token setup failed with exception: {e}")
+
+            # Offer retry
+            retry = Prompt.ask("\nWould you like to try again?", choices=["y", "n"], default="n")
+            if hasattr(__main__, '_proxy_debug_logger'):
+                __main__._proxy_debug_logger.debug(f"[AUTH] User retry choice: {retry}")
+            if retry.lower() == "y":
+                return await self.setup_long_term_token()
+
+            return None

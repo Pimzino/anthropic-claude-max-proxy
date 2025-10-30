@@ -89,6 +89,141 @@ python cli.py --bind 127.0.0.1
 - Select option 1 (Start Proxy Server)
 - Server runs at `http://0.0.0.0:8081` (default, listens on all interfaces)
 
+## Headless Mode
+
+The proxy supports headless (non-interactive) operation for CI/CD, Docker containers, and production deployments.
+
+### Authentication Methods
+
+#### Method 1: Long-Term OAuth Token (Recommended for Headless)
+
+Generate a **true long-term token** valid for **1 year** (365 days):
+
+```bash
+# Interactive setup
+python cli.py --setup-token
+
+# Or via menu option 6 in interactive mode
+python cli.py
+# Select option 6 (Setup Long-Term Token)
+```
+
+This will display your OAuth token (format: `sk-ant-oat01-...`). Store it securely.
+
+**How it works:** The `--setup-token` command requests a 1-year token by including `"expires_in": 31536000` (365 days in seconds) in the OAuth token exchange request, exactly like `claude setup-token` does. This is a **real long-term token**, not just a regular short-lived token.
+
+#### Method 2: Use Existing OAuth Flow Tokens
+
+Authenticate once interactively, then run headless:
+
+```bash
+# First time: authenticate interactively
+python cli.py
+# Select option 2 to login
+
+# Then run headless with saved tokens
+python cli.py --headless
+```
+
+**Note:** Regular OAuth flow tokens are short-lived (~1 hour) but include a refresh token for automatic renewal.
+
+### Running in Headless Mode
+
+#### Using Environment Variable
+
+```bash
+# Set the token
+export ANTHROPIC_OAUTH_TOKEN="sk-ant-oat01-..."
+
+# Run headless
+python cli.py --headless
+```
+
+#### Using CLI Argument
+
+```bash
+python cli.py --headless --token "sk-ant-oat01-..."
+```
+
+#### Using Saved Tokens
+
+```bash
+# If you've already authenticated via interactive mode
+python cli.py --headless
+```
+
+### Headless Mode Options
+
+```bash
+# Basic headless mode (auto-starts server)
+python cli.py --headless
+
+# Headless with custom bind address
+python cli.py --headless --bind 127.0.0.1
+
+# Headless without auto-starting server
+python cli.py --headless --no-auto-start
+
+# Headless with debug logging
+python cli.py --headless --debug
+
+# Provide token directly
+python cli.py --headless --token "sk-ant-oat01-..."
+```
+
+### Docker/Container Usage
+
+Example Dockerfile:
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+COPY . .
+
+# Set token via environment variable
+ENV ANTHROPIC_OAUTH_TOKEN="sk-ant-oat01-..."
+
+CMD ["python", "cli.py", "--headless"]
+```
+
+Or use docker-compose:
+
+```yaml
+version: '3.8'
+services:
+  claude-proxy:
+    build: .
+    ports:
+      - "8081:8081"
+    environment:
+      - ANTHROPIC_OAUTH_TOKEN=${ANTHROPIC_OAUTH_TOKEN}
+    command: python cli.py --headless
+```
+
+### Token Types Comparison
+
+| Feature | OAuth Flow Tokens | Long-Term Tokens |
+|---------|------------------|------------------|
+| **Validity** | ~1 hour | ~1 year |
+| **Auto-Refresh** | ✅ Yes (with refresh token) | ❌ No |
+| **Best For** | Interactive use | Headless/Production |
+| **Setup** | Browser OAuth flow | Same OAuth flow |
+| **Storage** | Automatic | Manual or env var |
+
+### Headless Mode Behavior
+
+When running in headless mode:
+1. Checks for authentication (env var, CLI arg, or stored tokens)
+2. Validates and saves token if provided
+3. Auto-refreshes expired OAuth flow tokens (if refresh token available)
+4. Starts server automatically (unless `--no-auto-start`)
+5. Runs in foreground with graceful shutdown on SIGINT/SIGTERM
+6. Exits with error if authentication fails
+
 ## Client Configuration
 
 The proxy supports **two API formats**:

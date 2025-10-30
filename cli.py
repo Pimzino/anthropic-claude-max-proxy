@@ -5,6 +5,7 @@ import time
 import logging
 import argparse
 import __main__
+import signal
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -209,7 +210,8 @@ class AnthropicProxyCLI:
         console.print(" 3. Refresh Token")
         console.print(" 4. Show Token Status")
         console.print(" 5. Logout (Clear Tokens)")
-        console.print(" 6. Exit")
+        console.print(" 6. Setup Long-Term Token")
+        console.print(" 7. Exit")
         console.print("=" * 50)
 
     def show_token_status(self):
@@ -439,6 +441,45 @@ class AnthropicProxyCLI:
         console.print("\nPress Enter to continue...")
         input()
 
+    def setup_long_term_token(self):
+        """Setup a long-term OAuth token (similar to claude setup-token)"""
+        console.print("\n[bold]Setup Long-Term OAuth Token[/bold]")
+        console.print("This will generate a long-term token valid for ~1 year.\n")
+
+        if self.debug and hasattr(__main__, '_proxy_debug_logger'):
+            __main__._proxy_debug_logger.debug("[CLI] Starting long-term token setup")
+
+        try:
+            # Run the long-term token OAuth flow
+            access_token = self.loop.run_until_complete(self.auth_flow.setup_long_term_token())
+
+            if access_token:
+                console.print("\n[green]✓ Long-term token generated successfully![/green]\n")
+                console.print("[bold]Your OAuth Token:[/bold]")
+                console.print(f"[cyan]{access_token}[/cyan]\n")
+                console.print("[yellow]IMPORTANT:[/yellow]")
+                console.print("• This token is valid for 1 year (365 days)")
+                console.print("• Store this token securely")
+                console.print("• You can use it with: export ANTHROPIC_OAUTH_TOKEN=\"<token>\"")
+                console.print("• Or pass it via: python cli.py --headless --token \"<token>\"")
+                console.print("• This token is already saved and ready to use")
+                console.print("• Unlike regular tokens, this will NOT auto-refresh\n")
+
+                if self.debug and hasattr(__main__, '_proxy_debug_logger'):
+                    __main__._proxy_debug_logger.debug("[CLI] Long-term token setup successful")
+            else:
+                console.print("[red]Failed to generate long-term token[/red]")
+                if self.debug and hasattr(__main__, '_proxy_debug_logger'):
+                    __main__._proxy_debug_logger.debug("[CLI] Long-term token setup failed")
+
+        except Exception as e:
+            console.print(f"[red]ERROR:[/red] {e}")
+            if self.debug and hasattr(__main__, '_proxy_debug_logger'):
+                __main__._proxy_debug_logger.debug(f"[CLI] Long-term token setup error: {e}")
+
+        console.print("\nPress Enter to continue...")
+        input()
+
     def run(self):
         """Main CLI loop"""
         while True:
@@ -446,7 +487,7 @@ class AnthropicProxyCLI:
             self.display_header()
             self.display_menu()
 
-            choice = Prompt.ask("Select option [1-6]", choices=["1", "2", "3", "4", "5", "6"])
+            choice = Prompt.ask("Select option [1-7]", choices=["1", "2", "3", "4", "5", "6", "7"])
 
             # Log user menu choice for debugging
             if self.debug and hasattr(__main__, '_proxy_debug_logger'):
@@ -466,6 +507,8 @@ class AnthropicProxyCLI:
             elif choice == "5":
                 self.logout()
             elif choice == "6":
+                self.setup_long_term_token()
+            elif choice == "7":
                 if self.server_running:
                     console.print("Stopping server before exit...")
                     self.stop_proxy_server()
@@ -476,6 +519,82 @@ class AnthropicProxyCLI:
                 self.loop.close()
                 console.print("Goodbye!")
                 break
+
+    def run_headless(self, auto_start: bool = True):
+        """Run in headless mode (non-interactive)"""
+        console.print("[bold]Anthropic Claude Max Proxy - Headless Mode[/bold]\n")
+
+        if self.debug and hasattr(__main__, '_proxy_debug_logger'):
+            __main__._proxy_debug_logger.debug("[CLI] Starting headless mode")
+
+        # Check authentication
+        auth_ok, auth_status, message = self.check_and_refresh_auth()
+
+        if not auth_ok:
+            console.print(f"[red]Authentication Error:[/red] {message}")
+            console.print("\n[yellow]To authenticate:[/yellow]")
+            console.print("1. Run: python cli.py")
+            console.print("2. Select option 2 to login")
+            console.print("3. Or set ANTHROPIC_OAUTH_TOKEN environment variable")
+            console.print("4. Or use: python cli.py --headless --token \"<your-token>\"")
+            sys.exit(1)
+
+        # Show auth status
+        status = self.storage.get_status()
+        token_type = status.get("token_type", "oauth_flow")
+        token_type_display = "Long-term" if token_type == "long_term" else "OAuth Flow"
+
+        console.print(f"[green]✓ Authenticated[/green] ({token_type_display})")
+        console.print(f"  Token expires: {status.get('time_until_expiry', 'unknown')}\n")
+
+        if auto_start:
+            # Start the server
+            console.print(f"Starting proxy server at http://{self.bind_address}:8081...")
+
+            try:
+                # Setup signal handlers for graceful shutdown
+                def signal_handler(sig, frame):
+                    console.print("\n[yellow]Shutting down...[/yellow]")
+                    if self.server_running:
+                        self.proxy_server.stop()
+                    sys.exit(0)
+
+                signal.signal(signal.SIGINT, signal_handler)
+                signal.signal(signal.SIGTERM, signal_handler)
+
+                # Start server in main thread (blocking)
+                self.server_thread = threading.Thread(target=self.proxy_server.run, daemon=True)
+                self.server_thread.start()
+                self.server_running = True
+
+                # Wait a moment for server to start
+                time.sleep(1)
+
+                console.print(f"[green]✓ Proxy server running[/green]\n")
+                console.print(f"[bold cyan]Native Anthropic API:[/bold cyan]")
+                console.print(f"  Base URL: http://{self.bind_address}:8081")
+                console.print(f"  Endpoint: /v1/messages")
+                console.print(f"\n[bold cyan]OpenAI-Compatible API:[/bold cyan]")
+                console.print(f"  Base URL: http://{self.bind_address}:8081/v1")
+                console.print(f"  Endpoint: /v1/chat/completions")
+                console.print(f"\n[dim]Press Ctrl+C to stop[/dim]\n")
+
+                if self.debug and hasattr(__main__, '_proxy_debug_logger'):
+                    __main__._proxy_debug_logger.debug(f"[CLI] Headless server started at {self.bind_address}:8081")
+
+                # Keep the main thread alive
+                while self.server_running:
+                    time.sleep(1)
+
+            except Exception as e:
+                console.print(f"[red]ERROR:[/red] Failed to start server: {e}")
+                if self.debug and hasattr(__main__, '_proxy_debug_logger'):
+                    __main__._proxy_debug_logger.debug(f"[CLI] Headless server start failed: {e}")
+                sys.exit(1)
+        else:
+            console.print("[yellow]Auto-start disabled. Server not started.[/yellow]")
+            if self.debug and hasattr(__main__, '_proxy_debug_logger'):
+                __main__._proxy_debug_logger.debug("[CLI] Headless mode with auto-start disabled")
 
 def main():
     """Entry point for the CLI"""
@@ -488,6 +607,27 @@ def main():
         action=argparse.BooleanOptionalAction,
         default=None,
         help="Enable raw stream tracing log capture (implies --stream-trace for --debug unless explicitly disabled)"
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run in headless mode (non-interactive, requires authentication)"
+    )
+    parser.add_argument(
+        "--token",
+        type=str,
+        default=None,
+        help="Provide long-term OAuth token for headless mode (format: sk-ant-oat01-...)"
+    )
+    parser.add_argument(
+        "--no-auto-start",
+        action="store_true",
+        help="Don't automatically start server in headless mode"
+    )
+    parser.add_argument(
+        "--setup-token",
+        action="store_true",
+        help="Setup a long-term OAuth token and exit"
     )
 
     args = parser.parse_args()
@@ -511,12 +651,39 @@ def main():
             bind_address=args.bind,
             stream_trace_enabled=stream_trace_setting
         )
-        cli.run()
+
+        # Handle token from CLI argument or environment variable
+        token_to_use = args.token or settings.ANTHROPIC_OAUTH_TOKEN
+        if token_to_use:
+            # Validate token format
+            if OAuthManager.validate_token_format(token_to_use):
+                console.print("[green]✓ Valid OAuth token provided, saving...[/green]")
+                cli.storage.save_long_term_token(token_to_use)
+                if args.debug and hasattr(__main__, '_proxy_debug_logger'):
+                    __main__._proxy_debug_logger.debug("[CLI] Long-term token saved from CLI/env")
+            else:
+                console.print("[red]ERROR:[/red] Invalid token format. Expected format: sk-ant-oat01-...")
+                sys.exit(1)
+
+        # Handle setup-token command
+        if args.setup_token:
+            cli.setup_long_term_token()
+            sys.exit(0)
+
+        # Run in headless or interactive mode
+        if args.headless:
+            cli.run_headless(auto_start=not args.no_auto_start)
+        else:
+            cli.run()
+
     except KeyboardInterrupt:
         console.print("\n[yellow]Interrupted by user[/yellow]")
         console.print("Goodbye!")
     except Exception as e:
         console.print(f"\n[red]Fatal error:[/red] {e}")
+        if args.debug:
+            import traceback
+            traceback.print_exc()
 
 if __name__ == "__main__":
     main()
