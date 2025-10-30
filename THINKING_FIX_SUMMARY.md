@@ -94,33 +94,86 @@ From the docs:
 
 ## The Fix
 
+### The Real Anthropic Requirement
+
+From the error message:
+```
+"When `thinking` is enabled, a final `assistant` message must start with a thinking block
+(preceeding the lastmost set of `tool_use` and `tool_result` blocks)"
+```
+
+**This is a STRICT requirement** - if thinking is enabled and there's a last assistant message with tool_use, it MUST start with a thinking block.
+
 ### What We Changed
 
 **Before (WRONG):**
 ```python
-# Check if last assistant has tools but no thinking
-if last_assistant_has_tools and not last_assistant_has_thinking:
-    # Create an empty thinking block (WRONG - no signature!)
-    msgs[i]["content"] = [{"type": "thinking", "thinking": ""}] + content
-    # OR disable thinking entirely (WRONG - too restrictive!)
-```
-
-**After (CORRECT):**
-```python
-# Always enable thinking if reasoning level is specified
-# Claude decides whether to actually use it
+# Always enable thinking
 anthropic_request["thinking"] = {
     "type": "enabled",
     "budget_tokens": thinking_budget
 }
+# This breaks when there's a last assistant message with tools but no thinking block!
+```
+
+**After (CORRECT):**
+```python
+# Check if we can safely enable thinking
+last_assistant_has_tools = _last_assistant_has_tool_use(messages)
+last_assistant_has_thinking = _last_assistant_starts_with_thinking(messages)
+
+if last_assistant_has_tools and not last_assistant_has_thinking:
+    # Can't enable thinking - would violate Anthropic's requirement
+    can_enable_thinking = False
+else:
+    # Safe to enable thinking
+    anthropic_request["thinking"] = {
+        "type": "enabled",
+        "budget_tokens": thinking_budget
+    }
 ```
 
 ### Key Changes
 
-1. **Removed the empty thinking block creation** - We can't create thinking blocks without signatures
-2. **Removed the thinking disable logic** - We don't need to disable thinking just because Claude didn't use it
-3. **Kept the caching logic** - Still cache thinking blocks when they exist
-4. **Kept the reattachment logic** - Still reattach cached thinking blocks (which have signatures)
+1. **Conditionally enable thinking** - Only enable if we can satisfy Anthropic's requirement
+2. **Check for last assistant message** - If it has tool_use, it must have thinking
+3. **Try to reattach from cache** - Look up thinking blocks by tool_use ID
+4. **Disable if necessary** - If we can't provide thinking block, disable thinking for this turn
+5. **Re-enable next turn** - Thinking can be enabled again when there's no conflicting assistant message
+
+### The Chicken-and-Egg Problem
+
+Here's the issue we face:
+
+**Turn 1 (First message):**
+- ✅ No last assistant message
+- ✅ Can enable thinking
+- Claude: "Simple task, I don't need extended thinking"
+- Response: text + tool_use, NO thinking blocks
+- Cache: Empty (nothing to cache)
+
+**Turn 2 (After tool results):**
+- ❌ Last assistant message has tool_use but NO thinking
+- ❌ Cache is empty (Claude didn't generate thinking)
+- ❌ Cannot enable thinking (would violate Anthropic's requirement)
+- Solution: Disable thinking for this turn
+
+**Turn 3 (After more tool results):**
+- ✅ Last assistant message from Turn 2 has no tool_use (only text response)
+- ✅ Can enable thinking again
+- Claude: May or may not use thinking depending on task
+
+### Why This Happens
+
+Thinking is **optional** - Claude only uses it for complex tasks. Simple tool calls like:
+- "List files in directory" → No thinking needed
+- "Read file contents" → No thinking needed
+- "Search for pattern" → No thinking needed
+
+But complex analysis like:
+- "Analyze architecture and suggest improvements" → Thinking used
+- "Find security vulnerabilities" → Thinking used
+- "Refactor for performance" → Thinking used
 
 ## How It Works Now
 

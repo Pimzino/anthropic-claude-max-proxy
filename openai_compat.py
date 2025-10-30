@@ -749,16 +749,32 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
     if reasoning_level and reasoning_level in REASONING_BUDGET_MAP:
         thinking_budget = REASONING_BUDGET_MAP[reasoning_level]
 
-        # Always enable thinking if reasoning level is specified
-        # Note: Claude decides whether to actually use thinking based on task complexity
-        # If Claude didn't generate thinking blocks in a previous response, that's fine -
-        # we don't need to (and shouldn't) create fake ones
-        anthropic_request["thinking"] = {
-            "type": "enabled",
-            "budget_tokens": thinking_budget
-        }
+        # Check if we can safely enable thinking
+        # Anthropic requires: if there's a last assistant message with tool_use, it must start with thinking
+        # So we can only enable thinking if:
+        # 1. There's no last assistant message, OR
+        # 2. The last assistant message doesn't have tool_use, OR
+        # 3. The last assistant message starts with thinking (we just prepended it from cache)
+        can_enable_thinking = True
+        last_assistant_has_tools = _last_assistant_has_tool_use(anthropic_request["messages"]) if anthropic_request.get("messages") else False
+        last_assistant_has_thinking = _last_assistant_starts_with_thinking(anthropic_request["messages"]) if anthropic_request.get("messages") else False
 
-        logger.debug(f"Enabled thinking with budget {thinking_budget} tokens (reasoning_effort: {reasoning_level})")
+        if last_assistant_has_tools and not last_assistant_has_thinking:
+            can_enable_thinking = False
+            logger.warning(
+                f"Cannot enable thinking: last assistant message has tool_use but no thinking block. "
+                f"Claude didn't generate thinking in the previous turn (task was too simple). "
+                f"Thinking will be disabled for this turn to satisfy Anthropic's requirements."
+            )
+
+        if can_enable_thinking:
+            anthropic_request["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": thinking_budget
+            }
+            logger.debug(f"Enabled thinking with budget {thinking_budget} tokens (reasoning_effort: {reasoning_level})")
+        else:
+            logger.debug(f"Thinking disabled for this turn (will re-enable next turn)")
 
         # Ensure max_tokens is sufficient for thinking + response
         # Reserve at least 1024 tokens for the actual response content
