@@ -298,6 +298,21 @@ def _last_assistant_starts_with_thinking(messages: List[Dict[str, Any]]) -> bool
     return False
 
 
+def _last_assistant_has_tool_use(messages: List[Dict[str, Any]]) -> bool:
+    """Check if the last assistant message contains any tool_use blocks."""
+    for msg in reversed(messages):
+        if msg.get("role") != "assistant":
+            continue
+        content = msg.get("content")
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    return True
+        # Found last assistant, checked its content
+        return False
+    return False
+
+
 def convert_openai_content_to_anthropic(openai_content: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Convert OpenAI content array to Anthropic content blocks."""
     anthropic_content = []
@@ -726,13 +741,13 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
     if reasoning_level and reasoning_level in REASONING_BUDGET_MAP:
         thinking_budget = REASONING_BUDGET_MAP[reasoning_level]
 
-        # If the conversation includes tool use but the last assistant message
-        # does not begin with a signed thinking block, Anthropic will reject the
-        # request. In that case, fall back to disabling thinking for this call.
-        tools_in_history = _conversation_contains_tools(anthropic_request["messages"]) if anthropic_request.get("messages") else False
+        # If the LAST assistant message contains tool_use blocks but does not begin
+        # with a signed thinking block, Anthropic will reject the request.
+        # In that case, fall back to disabling thinking for this call.
+        last_assistant_has_tools = _last_assistant_has_tool_use(anthropic_request["messages"]) if anthropic_request.get("messages") else False
         last_assistant_has_thinking = _last_assistant_starts_with_thinking(anthropic_request["messages"]) if anthropic_request.get("messages") else False
 
-        if tools_in_history and not last_assistant_has_thinking:
+        if last_assistant_has_tools and not last_assistant_has_thinking:
             logger.warning(
                 "Thinking requested but missing signed thinking block on last assistant with tools; "
                 "disabling thinking for this request to satisfy Anthropic requirements."
