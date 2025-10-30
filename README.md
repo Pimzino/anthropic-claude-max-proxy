@@ -50,12 +50,38 @@ This proxy is aligned with the [OpenCode](https://github.com/anthropics/opencode
 ## Prerequisites
 
 - Active Claude Pro or Claude Max subscription
-- Python 3.8+
-- pip
+- **Option 1: Traditional Setup**
+  - Python 3.8+
+  - pip
+- **Option 2: Docker Setup**
+  - Docker installed and running
 
 ## Quick Start
 
-1. **Virtual Environment Setup (Recommended)**
+### Option 1: Docker Setup
+
+**One-command setup and run:**
+```bash
+./run-docker.sh
+# Or specify custom port:
+./run-docker.sh 8082
+```
+
+This will automatically:
+- Build the Docker image
+- Create persistent volume for authentication tokens
+- Guide you through the OAuth authentication
+- Start the proxy server in background
+
+**Features:**
+- Automatic token refresh if container is already running
+- Persistent authentication across container restarts
+- Port conflict detection and automatic resolution
+- Clean container lifecycle management
+
+### Option 2: Traditional Python Setup
+
+1. **Virtual Environment Setup**
 ```bash
 python -m venv venv
 ```
@@ -88,6 +114,35 @@ python cli.py --bind 127.0.0.1
 6. **Start proxy:**
 - Select option 1 (Start Proxy Server)
 - Server runs at `http://0.0.0.0:8081` (default, listens on all interfaces)
+
+## Docker Management Commands
+
+When using Docker setup:
+
+**Check container status:**
+```bash
+docker ps -f name=claude-proxy-server
+```
+
+**View logs:**
+```bash
+docker logs claude-proxy-server -f
+```
+
+**Stop the server:**
+```bash
+docker stop claude-proxy-server
+```
+
+**Remove container:**
+```bash
+docker rm claude-proxy-server
+```
+
+**Re-run to refresh authentication:**
+```bash
+./run-docker.sh
+```
 
 ## Client Configuration
 
@@ -406,6 +461,15 @@ response = client.messages.create(
   - `claude-sonnet-4-20250514-reasoning-high` (32k tokens)
 
 These features provide compatibility with OpenAI's API format while leveraging Anthropic's extended thinking capabilities that are not available or not user friendly in Claude Code.
+
+## Docker Architecture
+
+The Docker setup uses:
+- **Persistent Volume:** `claude-tokens` - Stores authentication tokens across container restarts
+- **Container Name:** `claude-proxy-server` - Fixed name for easy management
+- **Automatic Restart:** `unless-stopped` policy ensures service continuity
+- **Smart Authentication:** Only re-authenticates when tokens expire
+- **Port Management:** Automatic port conflict resolution for default port
 
 ## Configuration Priority
 
