@@ -1039,14 +1039,7 @@ async def convert_anthropic_stream_to_openai(
                 {
                     "index": 0,
                     "delta": {
-                        "reasoning": {
-                            "content": [
-                                {
-                                    "type": "output_text",
-                                    "text": text
-                                }
-                            ]
-                        }
+                        "reasoning_content": text
                     },
                     "finish_reason": None
                 }
