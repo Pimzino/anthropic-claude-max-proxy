@@ -444,7 +444,7 @@ class AnthropicProxyCLI:
     def setup_long_term_token(self):
         """Setup a long-term OAuth token (similar to claude setup-token)"""
         console.print("\n[bold]Setup Long-Term OAuth Token[/bold]")
-        console.print("This will generate a long-term token valid for ~1 year.\n")
+        console.print("This will generate a long-term token valid for 1 year (365 days).\n")
 
         if self.debug and hasattr(__main__, '_proxy_debug_logger'):
             __main__._proxy_debug_logger.debug("[CLI] Starting long-term token setup")
@@ -454,16 +454,33 @@ class AnthropicProxyCLI:
             access_token = self.loop.run_until_complete(self.auth_flow.setup_long_term_token())
 
             if access_token:
-                console.print("\n[green]✓ Long-term token generated successfully![/green]\n")
+                # Verify token was saved
+                status = self.storage.get_status()
+
+                console.print("\n[green]✓ Long-term token generated and saved successfully![/green]\n")
                 console.print("[bold]Your OAuth Token:[/bold]")
                 console.print(f"[cyan]{access_token}[/cyan]\n")
-                console.print("[yellow]IMPORTANT:[/yellow]")
-                console.print("• This token is valid for 1 year (365 days)")
-                console.print("• Store this token securely")
-                console.print("• You can use it with: export ANTHROPIC_OAUTH_TOKEN=\"<token>\"")
-                console.print("• Or pass it via: python cli.py --headless --token \"<token>\"")
-                console.print("• This token is already saved and ready to use")
-                console.print("• Unlike regular tokens, this will NOT auto-refresh\n")
+
+                console.print("[bold]Token Details:[/bold]")
+                console.print(f"• Type: Long-term (1 year)")
+                console.print(f"• Expires: {status.get('expires_at', 'unknown')}")
+                console.print(f"• Time remaining: {status.get('time_until_expiry', 'unknown')}")
+                console.print(f"• Saved to: {self.storage.token_file}\n")
+
+                console.print("[bold green]✓ Ready to use![/bold green]")
+                console.print("You can now run headless mode without any additional setup:\n")
+                console.print("  [cyan]python cli.py --headless[/cyan]\n")
+
+                console.print("[yellow]For use on other machines:[/yellow]")
+                console.print("• Set environment variable:")
+                console.print(f'  [dim]export ANTHROPIC_OAUTH_TOKEN="{access_token}"[/dim]')
+                console.print("• Or pass directly:")
+                console.print(f'  [dim]python cli.py --headless --token "{access_token}"[/dim]\n')
+
+                console.print("[yellow]Important:[/yellow]")
+                console.print("• This token will NOT auto-refresh (valid for 1 year)")
+                console.print("• After 1 year, run this command again to generate a new token")
+                console.print("• Store this token securely if using on other machines\n")
 
                 if self.debug and hasattr(__main__, '_proxy_debug_logger'):
                     __main__._proxy_debug_logger.debug("[CLI] Long-term token setup successful")

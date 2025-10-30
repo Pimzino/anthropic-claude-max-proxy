@@ -108,7 +108,19 @@ python cli.py
 # Select option 6 (Setup Long-Term Token)
 ```
 
-This will display your OAuth token (format: `sk-ant-oat01-...`). Store it securely.
+This will:
+1. Open your browser for OAuth authentication
+2. Generate a 1-year token
+3. **Automatically save it** to your token file
+4. Display the token for use on other machines
+
+**The token is immediately ready to use!** After running `--setup-token`, you can run:
+
+```bash
+python cli.py --headless
+```
+
+No additional configuration needed on the same machine.
 
 **How it works:** The `--setup-token` command requests a 1-year token by including `"expires_in": 31536000` (365 days in seconds) in the OAuth token exchange request, exactly like `claude setup-token` does. This is a **real long-term token**, not just a regular short-lived token.
 
