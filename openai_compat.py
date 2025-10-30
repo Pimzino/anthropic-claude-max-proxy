@@ -698,29 +698,37 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
                 last_idx = i
                 break
         if last_idx is None:
+            logger.debug("[THINKING_CACHE] No assistant message found in history")
             return
         last_msg = msgs[last_idx]
         content = last_msg.get("content")
         if not isinstance(content, list) or not content:
+            logger.debug("[THINKING_CACHE] Last assistant message has no content list")
             return
         first = content[0]
         if isinstance(first, dict) and first.get("type") in ("thinking", "redacted_thinking"):
+            logger.debug("[THINKING_CACHE] Last assistant already starts with thinking block")
             return
         # collect tool_use ids
         tool_ids = [b.get("id") for b in content if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("id")]
         if not tool_ids:
+            logger.debug("[THINKING_CACHE] Last assistant message has no tool_use blocks")
             return
+        logger.debug(f"[THINKING_CACHE] Looking for cached thinking for tool_use IDs: {tool_ids}")
         cached = None
         for tid in tool_ids:
             block = THINKING_CACHE.get(tid)
+            logger.debug(f"[THINKING_CACHE] Cache lookup for {tid}: {'FOUND' if block else 'NOT FOUND'}")
             if block and isinstance(block.get("signature"), str) and block.get("signature").strip():
                 cached = block
                 break
         if cached:
-            logger.debug("Reattaching signed thinking block for tool_use id(s) %s", tool_ids)
+            logger.debug(f"[THINKING_CACHE] Reattaching signed thinking block for tool_use id(s) {tool_ids}")
             last_msg["content"] = [cached] + content
             msgs[last_idx] = last_msg
             anthropic_request["messages"] = msgs
+        else:
+            logger.debug(f"[THINKING_CACHE] No valid cached thinking block found for tool_use id(s) {tool_ids}")
 
     _maybe_prepend_signed_thinking_for_tools()
 
@@ -890,6 +898,24 @@ def convert_anthropic_response_to_openai(anthropic_response: Dict[str, Any], mod
     # Extract content with thinking/reasoning
     content = anthropic_response.get("content", [])
     text_content, tool_calls, reasoning_content, thinking_blocks = convert_anthropic_content_to_openai(content)
+
+    # Cache signed thinking blocks for tool_use (non-streaming path)
+    if thinking_blocks and tool_calls:
+        # Find first thinking block with a signature
+        signed_thinking = None
+        for tb in thinking_blocks:
+            sig = tb.get("signature")
+            if tb.get("thinking") and isinstance(sig, str) and sig.strip():
+                signed_thinking = {"type": "thinking", "thinking": tb["thinking"], "signature": sig}
+                break
+
+        if signed_thinking:
+            tool_ids = [tc["id"] for tc in tool_calls if tc.get("id")]
+            if tool_ids:
+                logger.debug(f"[THINKING_CACHE] Storing signed thinking block for tool_use IDs: {tool_ids}")
+                for tid in tool_ids:
+                    THINKING_CACHE.put(tid, signed_thinking)
+                    logger.debug(f"[THINKING_CACHE] Stored thinking block for tool_use ID: {tid}")
 
     # Build message
     message = {
@@ -1283,8 +1309,14 @@ async def convert_anthropic_stream_to_openai(
                             saved_block = {"type": "thinking", "thinking": acc["thinking"], "signature": sig}
                             break
                     if saved_block and current_tool_use_ids:
+                        logger.debug(f"[THINKING_CACHE] Storing signed thinking block for tool_use IDs: {current_tool_use_ids}")
                         for tid in current_tool_use_ids:
                             THINKING_CACHE.put(tid, saved_block)
+                            logger.debug(f"[THINKING_CACHE] Stored thinking block for tool_use ID: {tid}")
+                    elif saved_block and not current_tool_use_ids:
+                        logger.debug("[THINKING_CACHE] Have signed thinking block but no tool_use IDs to cache it with")
+                    elif not saved_block and current_tool_use_ids:
+                        logger.debug(f"[THINKING_CACHE] Have tool_use IDs {current_tool_use_ids} but no signed thinking block to cache")
                     # Reset accumulators for safety in case of continued streaming
                     current_tool_use_ids.clear()
                     current_thinking_blocks.clear()
