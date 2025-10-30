@@ -932,6 +932,13 @@ def convert_anthropic_response_to_openai(anthropic_response: Dict[str, Any], mod
     if tool_calls:
         message["tool_calls"] = tool_calls
 
+    # Include reasoning content and thinking blocks if present
+    if reasoning_content:
+        message["reasoning_content"] = reasoning_content
+
+    if thinking_blocks:
+        message["thinking_blocks"] = thinking_blocks
+
     # Map stop reason
     finish_reason = map_stop_reason_to_finish_reason(anthropic_response.get("stop_reason"))
 
