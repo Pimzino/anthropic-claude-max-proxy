@@ -32,6 +32,24 @@ The response confirms the 1-year validity:
 }
 ```
 
+### Critical Discovery: Scope Limitation
+
+**Important:** Custom `expires_in` values are **only allowed with the `user:inference` scope**.
+
+If you request other scopes like `user:profile` or `org:create_api_key`, Anthropic will reject the custom `expires_in` with:
+
+```json
+{
+  "error": "invalid_request",
+  "error_description": "Custom expires_in not allowed for scope 'user:profile'"
+}
+```
+
+This is why our implementation uses **two different OAuth flows**:
+
+1. **Regular OAuth** (short-lived): Uses `org:create_api_key user:profile user:inference` scopes
+2. **Long-term token**: Uses **only** `user:inference` scope to allow custom expiry
+
 ## Implementation
 
 ### Token Types
@@ -157,7 +175,8 @@ POST https://console.anthropic.com/v1/oauth/token
   "code": "...",
   "client_id": "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
   "redirect_uri": "https://console.anthropic.com/oauth/code/callback",
-  "code_verifier": "..."
+  "code_verifier": "...",
+  "scope": "org:create_api_key user:profile user:inference"
   // No expires_in parameter
 }
 ```
@@ -170,9 +189,15 @@ POST https://console.anthropic.com/v1/oauth/token
   "client_id": "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
   "redirect_uri": "https://console.anthropic.com/oauth/code/callback",
   "code_verifier": "...",
+  "scope": "user:inference",  // Minimal scope required for custom expires_in
   "expires_in": 31536000  // Request 1-year validity
 }
 ```
+
+**Key Differences:**
+1. Long-term tokens use **only** `user:inference` scope (not `user:profile` or `org:create_api_key`)
+2. Long-term tokens include `expires_in: 31536000` parameter
+3. Both use the same OAuth endpoint and flow
 
 ### Token Format
 
@@ -235,3 +260,48 @@ Potential improvements:
 2. **Automatic token rotation** - Generate new token before expiration
 3. **Multiple token support** - Switch between different accounts
 4. **Token encryption** - Encrypt tokens at rest
+
+## Troubleshooting
+
+### Error: "Custom expires_in not allowed for scope 'user:profile'"
+
+**Cause:** You're trying to use a regular OAuth token with custom expiry.
+
+**Solution:** Use the `--setup-token` command which uses the correct minimal scope (`user:inference` only):
+
+```bash
+python cli.py --setup-token
+```
+
+### Error: "No authentication tokens found"
+
+**Cause:** No tokens are stored and no token was provided.
+
+**Solutions:**
+1. Set environment variable: `export ANTHROPIC_OAUTH_TOKEN="sk-ant-oat01-..."`
+2. Use CLI argument: `python cli.py --headless --token "sk-ant-oat01-..."`
+3. Login first: `python cli.py` → Select option 2 → Then run headless
+
+### Error: "Invalid token format"
+
+**Cause:** Token doesn't match expected format.
+
+**Solution:** Ensure token starts with `sk-ant-oat01-` and contains only valid characters (alphanumeric, hyphens, underscores).
+
+### Long-term token expired after 1 year
+
+**Cause:** Long-term tokens cannot be refreshed.
+
+**Solution:** Generate a new long-term token:
+
+```bash
+python cli.py --setup-token
+```
+
+### Regular OAuth tokens keep expiring
+
+**Cause:** You're using regular OAuth flow tokens (1 hour expiry) instead of long-term tokens.
+
+**Solution:**
+- For headless mode, use `--setup-token` to generate a 1-year token
+- Or let the proxy auto-refresh (it will use the refresh token automatically)

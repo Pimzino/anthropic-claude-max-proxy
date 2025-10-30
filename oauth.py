@@ -111,6 +111,33 @@ class OAuthManager:
         # Use claude.ai for authorization (Claude Pro/Max)
         return f"{AUTH_BASE_AUTHORIZE}/oauth/authorize?{urlencode(params)}"
 
+    def get_authorize_url_for_long_term_token(self) -> str:
+        """Construct OAuth authorize URL for long-term token with minimal scope
+
+        Uses only 'user:inference' scope to allow custom expires_in parameter.
+        The 'user:profile' and 'org:create_api_key' scopes don't allow custom expiry.
+        """
+        self.code_verifier, code_challenge = self.generate_pkce()
+        # OpenCode uses the verifier as the state
+        self.state = self.code_verifier
+
+        # Save PKCE values for later use
+        self._save_pkce()
+
+        params = {
+            "code": "true",  # Critical parameter from OpenCode
+            "client_id": CLIENT_ID,
+            "response_type": "code",
+            "redirect_uri": REDIRECT_URI,
+            "scope": "user:inference",  # Minimal scope for long-term tokens
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
+            "state": self.state
+        }
+
+        # Use claude.ai for authorization (Claude Pro/Max)
+        return f"{AUTH_BASE_AUTHORIZE}/oauth/authorize?{urlencode(params)}"
+
     def start_login_flow(self) -> str:
         """Start the OAuth login flow by opening browser (plan.md section 3.3)"""
         auth_url = self.get_authorize_url()

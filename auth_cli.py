@@ -179,7 +179,7 @@ class CLIAuthFlow:
         try:
             # Step 1: Generate auth URL and open browser
             console.print("\n[bold]Step 1:[/bold] Opening browser for authentication...")
-            auth_url = self.oauth.get_authorize_url()
+            auth_url = self.oauth.get_authorize_url_for_long_term_token()
 
             if hasattr(__main__, '_proxy_debug_logger'):
                 __main__._proxy_debug_logger.debug(f"[AUTH] Generated auth URL: {auth_url[:50]}...")
