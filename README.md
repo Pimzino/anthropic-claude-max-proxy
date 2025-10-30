@@ -68,7 +68,8 @@ pip install -r requirements.txt
 
 3. **Configure (optional):**
 ```bash
-cp config.example.json config.json
+cp .env.example .env
+# Edit .env to customize settings (port, timeouts, etc.)
 ```
 
 4. **Run:**
@@ -557,7 +558,7 @@ These features provide compatibility with OpenAI's API format while leveraging A
 ## Configuration Priority
 
 1. Environment variables (highest)
-2. config.json file
+2. .env file
 3. Built-in defaults (lowest)
 
 ## License

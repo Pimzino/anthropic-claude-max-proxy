@@ -2,7 +2,7 @@
 
 Loads configuration from multiple sources with the following priority:
 1. Environment variables (highest priority)
-2. config.json file
+2. .env file
 3. Hardcoded defaults (lowest priority)
 """
 
@@ -11,6 +11,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional, List
+from dotenv import load_dotenv
 
 # Set up logger for config loader
 logger = logging.getLogger(__name__)
@@ -19,39 +20,35 @@ logger = logging.getLogger(__name__)
 class ConfigLoader:
     """Handles loading configuration from various sources"""
 
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, env_path: Optional[str] = None):
         """Initialize the config loader
 
         Args:
-            config_path: Optional path to config.json file.
-                        Defaults to 'config.json' in the current directory.
+            env_path: Optional path to .env file.
+                     Defaults to '.env' in the current directory.
         """
-        self.config_path = Path(config_path) if config_path else Path("config.json")
-        self.config_data = self._load_config_file()
+        self.env_path = Path(env_path) if env_path else Path(".env")
+        self._load_env_file()
 
-    def _load_config_file(self) -> Dict[str, Any]:
-        """Load configuration from JSON file if it exists"""
-        if self.config_path.exists():
-            try:
-                with open(self.config_path, 'r') as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, IOError) as e:
-                logger.warning(f"Failed to load {self.config_path}: {e}")
-                return {}
-        return {}
+    def _load_env_file(self):
+        """Load environment variables from .env file if it exists"""
+        if self.env_path.exists():
+            load_dotenv(dotenv_path=self.env_path)
+            logger.debug(f"Loaded environment variables from {self.env_path}")
+        else:
+            logger.debug(f".env file not found at {self.env_path}, using environment variables and defaults only")
 
-    def get(self, env_var: str, config_path: str, default: Any) -> Any:
-        """Get a configuration value with priority: env > config.json > default
+    def get(self, env_var: str, default: Any) -> Any:
+        """Get a configuration value with priority: env > default
 
         Args:
             env_var: Environment variable name to check
-            config_path: Dot-separated path in config.json (e.g., "server.port")
-            default: Default value if not found elsewhere
+            default: Default value if not found in environment
 
         Returns:
-            The configuration value from the highest priority source
+            The configuration value from environment or default
         """
-        # 1. Check environment variable
+        # Check environment variable
         env_value = os.getenv(env_var)
         if env_value is not None:
             # Try to parse as appropriate type
@@ -61,53 +58,21 @@ class ConfigLoader:
                 try:
                     return int(env_value)
                 except ValueError:
-                    pass
+                    logger.warning(f"Failed to parse {env_var}={env_value} as int, using default: {default}")
+                    return default
             elif isinstance(default, float):
                 try:
                     return float(env_value)
                 except ValueError:
-                    pass
+                    logger.warning(f"Failed to parse {env_var}={env_value} as float, using default: {default}")
+                    return default
             return env_value
 
-        # 2. Check config.json
-        if self.config_data:
-            value = self._get_nested_value(self.config_data, config_path)
-            if value is not None:
-                # Expand home directory if it's a path
-                if isinstance(value, str) and value.startswith("~/"):
-                    return str(Path(value).expanduser())
-                return value
-
-        # 3. Return default
+        # Return default
         # Expand home directory if it's a path
         if isinstance(default, str) and default.startswith("~/"):
             return str(Path(default).expanduser())
         return default
-
-    def _get_nested_value(self, data: Dict[str, Any], path: str) -> Any:
-        """Get a value from nested dictionary using dot notation
-
-        Args:
-            data: The dictionary to search
-            path: Dot-separated path (e.g., "server.port")
-
-        Returns:
-            The value if found, None otherwise
-        """
-        keys = path.split('.')
-        current = data
-
-        for key in keys:
-            if isinstance(current, dict) and key in current:
-                current = current[key]
-            else:
-                return None
-
-        return current
-
-    def get_all_config(self) -> Dict[str, Any]:
-        """Get the entire loaded configuration"""
-        return self.config_data.copy()
 
 
 # Create a global instance
