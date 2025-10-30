@@ -1159,32 +1159,40 @@ async def convert_anthropic_stream_to_openai(
                         logger.debug(f"[{request_id}] [STREAM_TOOL] Received input_json_delta for index {sse_index}: {partial_json[:100]}...")
                         logger.debug(f"[{request_id}] [STREAM_TOOL] Accumulated arguments so far: {call_state['arguments'][:200]}...")
 
-                        delta_chunk = {
-                            "id": completion_id,
-                            "object": "chat.completion.chunk",
-                            "created": created,
-                            "model": model,
-                            "choices": [
-                                {
-                                    "index": 0,
-                                    "delta": {
-                                        "tool_calls": [
-                                            {
-                                                "index": call_state["openai_index"],
-                                                "id": call_state["id"],
-                                                "type": "function",
-                                                "function": {
-                                                    "name": call_state["name"],
-                                                    "arguments": partial_json
-                                                }
-                                            }
-                                        ]
-                                    },
-                                    "finish_reason": None
-                                }
-                            ]
-                        }
-                        yield emit(delta_chunk)
+                        # CRITICAL FIX: Do NOT stream partial JSON arguments character-by-character
+                        # This causes clients like Cursor to parse incomplete JSON values
+                        # (e.g., {"name": "A"} instead of {"name": "Add OpenRouter Example"})
+                        # Instead, we buffer the complete arguments and send them at content_block_stop
+                        #
+                        # Original buggy code that streamed partial JSON:
+                        # delta_chunk = {
+                        #     "id": completion_id,
+                        #     "object": "chat.completion.chunk",
+                        #     "created": created,
+                        #     "model": model,
+                        #     "choices": [
+                        #         {
+                        #             "index": 0,
+                        #             "delta": {
+                        #                 "tool_calls": [
+                        #                     {
+                        #                         "index": call_state["openai_index"],
+                        #                         "id": call_state["id"],
+                        #                         "type": "function",
+                        #                         "function": {
+                        #                             "name": call_state["name"],
+                        #                             "arguments": partial_json  # <-- BUG: partial JSON
+                        #                         }
+                        #                     }
+                        #                 ]
+                        #             },
+                        #             "finish_reason": None
+                        #         }
+                        #     ]
+                        # }
+                        # yield emit(delta_chunk)
+
+                        # Just accumulate the arguments, don't emit anything yet
                         continue
 
                     if delta_type in ("thinking_delta", "redacted_thinking_delta"):
@@ -1211,6 +1219,40 @@ async def convert_anthropic_stream_to_openai(
                 if data_type == "content_block_stop":
                     sse_index = data.get("index")
                     if sse_index is not None:
+                        # If this was a tool call, send the complete arguments now
+                        call_state = tool_call_states.get(sse_index)
+                        if call_state and call_state.get("arguments"):
+                            logger.debug(f"[{request_id}] [STREAM_TOOL] Tool block stopped, sending complete arguments")
+                            logger.debug(f"[{request_id}] [STREAM_TOOL] Complete arguments: {call_state['arguments']}")
+
+                            # Send the complete arguments in one chunk
+                            final_args_chunk = {
+                                "id": completion_id,
+                                "object": "chat.completion.chunk",
+                                "created": created,
+                                "model": model,
+                                "choices": [
+                                    {
+                                        "index": 0,
+                                        "delta": {
+                                            "tool_calls": [
+                                                {
+                                                    "index": call_state["openai_index"],
+                                                    "id": call_state["id"],
+                                                    "type": "function",
+                                                    "function": {
+                                                        "name": call_state["name"],
+                                                        "arguments": call_state["arguments"]
+                                                    }
+                                                }
+                                            ]
+                                        },
+                                        "finish_reason": None
+                                    }
+                                ]
+                            }
+                            yield emit(final_args_chunk)
+
                         tool_call_states.pop(sse_index, None)
                         thinking_states.pop(sse_index, None)
                     continue
