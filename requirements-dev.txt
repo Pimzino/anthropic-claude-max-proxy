@@ -1,0 +1,21 @@
+# Development Dependencies for ccmaxproxy
+# Install with: pip install -r requirements-dev.txt
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+respx==0.20.2  # HTTP mocking for httpx
+
+# Code Quality
+black==23.12.1
+ruff==0.1.9
+mypy==1.8.0
+
+# Type Stubs
+types-aiofiles==23.2.0.20240106
+
+# Testing Utilities
+faker==22.0.0  # Generate fake data for tests
+freezegun==1.4.0  # Mock datetime for token expiry tests

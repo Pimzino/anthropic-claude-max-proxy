@@ -35,3 +35,4 @@ class OpenAIChatCompletionRequest(BaseModel):
     function_call: Optional[Any] = None  # Legacy
     reasoning_effort: Optional[str] = None  # "low", "medium", "high" - maps to Anthropic thinking budget
 
+

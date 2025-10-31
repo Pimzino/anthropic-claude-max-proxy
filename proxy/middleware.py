@@ -20,3 +20,4 @@ async def log_requests_middleware(request: Request, call_next):
 
     return response
 
+
