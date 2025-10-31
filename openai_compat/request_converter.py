@@ -203,6 +203,20 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
     if reasoning_level and reasoning_level in REASONING_BUDGET_MAP:
         thinking_budget = REASONING_BUDGET_MAP[reasoning_level]
 
+        # Ensure max_tokens is sufficient for reasoning models
+        # This must happen BEFORE we determine if thinking can be enabled,
+        # because reasoning models need higher token limits even when thinking is disabled
+        # Reserve at least 1024 tokens for the actual response content
+        min_response_tokens = 1024
+        required_total = thinking_budget + min_response_tokens
+
+        if anthropic_request["max_tokens"] < required_total:
+            logger.info(
+                f"Reasoning model requested: overriding max_tokens from {anthropic_request['max_tokens']} to {required_total} "
+                f"(thinking budget: {thinking_budget} + min response: {min_response_tokens}) for reasoning level '{reasoning_level}'"
+            )
+            anthropic_request["max_tokens"] = required_total
+
         # Check if we can safely enable thinking
         # Anthropic requires: if there's a last assistant message with tool_use, it must start with thinking
         # So we can only enable thinking if:
@@ -226,18 +240,6 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
                 "budget_tokens": thinking_budget
             }
             logger.debug(f"Enabled thinking with budget {thinking_budget} tokens (reasoning_effort: {reasoning_level})")
-
-        # Ensure max_tokens is sufficient for thinking + response
-        # Reserve at least 1024 tokens for the actual response content
-        min_response_tokens = 1024
-        required_total = thinking_budget + min_response_tokens
-
-        if anthropic_request.get("thinking") and anthropic_request["max_tokens"] < required_total:
-            logger.warning(
-                f"Increasing max_tokens from {anthropic_request['max_tokens']} to {required_total} "
-                f"(thinking: {thinking_budget} + response: {min_response_tokens}) for reasoning level '{reasoning_level}'"
-            )
-            anthropic_request["max_tokens"] = required_total
 
         if anthropic_request.get("thinking"):
             logger.debug(
