@@ -17,11 +17,7 @@ from anthropic import (
     stream_anthropic_response,
 )
 from oauth import OAuthManager
-from settings import (
-    STREAM_TRACE_ENABLED,
-    STREAM_TRACE_DIR,
-    STREAM_TRACE_MAX_BYTES,
-)
+import settings
 from stream_debug import maybe_create_stream_tracer
 from ..logging_utils import log_request
 
@@ -103,11 +99,11 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
             # Handle streaming response
             logger.debug(f"[{request_id}] Initiating streaming request")
             tracer = maybe_create_stream_tracer(
-                enabled=STREAM_TRACE_ENABLED,
+                enabled=settings.STREAM_TRACE_ENABLED,
                 request_id=request_id,
                 route="anthropic-messages",
-                base_dir=STREAM_TRACE_DIR,
-                max_bytes=STREAM_TRACE_MAX_BYTES,
+                base_dir=settings.STREAM_TRACE_DIR,
+                max_bytes=settings.STREAM_TRACE_MAX_BYTES,
             )
 
             async def raw_stream():

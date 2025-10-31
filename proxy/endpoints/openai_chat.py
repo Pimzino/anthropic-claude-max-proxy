@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 
 from oauth import OAuthManager
 from models import is_custom_model, get_custom_model_config
-from settings import STREAM_TRACE_ENABLED, STREAM_TRACE_DIR, STREAM_TRACE_MAX_BYTES
+import settings
 from stream_debug import maybe_create_stream_tracer
 from anthropic import make_anthropic_request
 from openai_compat import convert_anthropic_response_to_openai
@@ -120,11 +120,11 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
                 logger.debug(f"[{request_id}] Initiating streaming request to custom provider")
 
                 tracer = maybe_create_stream_tracer(
-                    enabled=STREAM_TRACE_ENABLED,
+                    enabled=settings.STREAM_TRACE_ENABLED,
                     request_id=request_id,
                     route="custom-provider",
-                    base_dir=STREAM_TRACE_DIR,
-                    max_bytes=STREAM_TRACE_MAX_BYTES,
+                    base_dir=settings.STREAM_TRACE_DIR,
+                    max_bytes=settings.STREAM_TRACE_MAX_BYTES,
                 )
 
                 async def custom_stream():
@@ -229,11 +229,11 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
             logger.debug(f"[{request_id}] Initiating streaming request (OpenAI format)")
 
             tracer = maybe_create_stream_tracer(
-                enabled=STREAM_TRACE_ENABLED,
+                enabled=settings.STREAM_TRACE_ENABLED,
                 request_id=request_id,
                 route="openai-chat",
-                base_dir=STREAM_TRACE_DIR,
-                max_bytes=STREAM_TRACE_MAX_BYTES,
+                base_dir=settings.STREAM_TRACE_DIR,
+                max_bytes=settings.STREAM_TRACE_MAX_BYTES,
             )
 
             async def stream_with_conversion():

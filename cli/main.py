@@ -59,10 +59,6 @@ def main():
     # Apply overrides to runtime modules
     settings.STREAM_TRACE_ENABLED = stream_trace_setting
 
-    # Import proxy module only when needed (deferred import to avoid circular dependencies)
-    import proxy
-    proxy.STREAM_TRACE_ENABLED = stream_trace_setting
-
     try:
         cli = AnthropicProxyCLI(
             debug=args.debug,
