@@ -5,8 +5,8 @@ from rich.console import Console
 from rich.prompt import Prompt
 
 from oauth import OAuthManager
-from storage import TokenStorage
-from debug_console import create_debug_console
+from utils.storage import TokenStorage
+from utils.debug_console import create_debug_console
 
 # Console will be configured based on debug mode
 console = Console()

@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from config_loader import get_config_loader
+from config.loader import get_config_loader
 
 # Get the config loader instance
 config = get_config_loader()
