@@ -27,7 +27,7 @@ class ProxyServer:
     def _setup_debug_logging(self):
         """Setup debug logging for the proxy server"""
         import os
-        from debug_console import setup_debug_logger
+        from utils.debug_console import setup_debug_logger
 
         # Get root logger and configure it for debug
         root_logger = logging.getLogger()
