@@ -1,7 +1,7 @@
 """Tests for SSE (Server-Sent Events) parser"""
 import pytest
 
-from openai_compat.sse_parser import SSEParser, SSEEvent
+from openai_compat.sse_parser import SSEParser
 
 
 @pytest.mark.unit

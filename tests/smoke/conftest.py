@@ -4,7 +4,6 @@ These tests require a valid ANTHROPIC_OAUTH_TOKEN environment variable
 and will make actual API calls to Anthropic. Use with caution.
 """
 import os
-import sys
 import pytest
 
 # Import from the installed anthropic package, not the local module

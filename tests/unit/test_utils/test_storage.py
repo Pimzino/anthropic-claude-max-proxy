@@ -1,5 +1,4 @@
 """Tests for TokenStorage"""
-import json
 import os
 import time
 from unittest.mock import patch

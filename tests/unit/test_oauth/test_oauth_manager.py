@@ -1,6 +1,6 @@
 """Tests for OAuthManager class"""
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch, AsyncMock
 
 from oauth import OAuthManager
 
@@ -153,7 +153,7 @@ class TestOAuthManager:
 
         # Step 2: Exchange code for tokens
         with patch('oauth.exchange_code', new_callable=AsyncMock,
-                  return_value={"status": "success"}) as mock_exchange:
+                  return_value={"status": "success"}):
             result = await manager.exchange_code("auth_code")
             assert result["status"] == "success"
 

@@ -242,7 +242,7 @@ Tests run automatically on:
 
 - Every push to main branch
 - Every pull request
-- Python versions: 3.8, 3.9, 3.10, 3.11, 3.12
+- Python versions: 3.9, 3.10, 3.11, 3.12
 
 See `.github/workflows/test.yml` for configuration.
 

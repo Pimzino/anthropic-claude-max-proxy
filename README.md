@@ -50,7 +50,7 @@ This proxy is aligned with the [OpenCode](https://github.com/anthropics/opencode
 ## Prerequisites
 
 - Active Claude Pro or Claude Max subscription
-- Python 3.8+
+- Python 3.9+
 - pip
 
 ## Quick Start

@@ -69,7 +69,7 @@ class ProxyServer:
     def run(self):
         """Run the proxy server (blocking)"""
         logger.info(f"Starting Anthropic Claude Max Proxy on http://{self.bind_address}:{PORT}")
-        logger.info(f"Available endpoints: /v1/messages (Anthropic), /v1/chat/completions (OpenAI)")
+        logger.info("Available endpoints: /v1/messages (Anthropic), /v1/chat/completions (OpenAI)")
         if STREAM_TRACE_ENABLED:
             logger.warning(
                 "Stream tracing is ENABLED - raw SSE chunks will be written inside '%s'",

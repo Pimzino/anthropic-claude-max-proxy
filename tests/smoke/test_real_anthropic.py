@@ -5,7 +5,6 @@ They make real API calls and are opt-in only (marked with @pytest.mark.smoke).
 
 Run with: pytest tests/smoke/ -v -m smoke
 """
-import os
 import pytest
 
 
@@ -126,11 +125,6 @@ class TestRealAnthropicAPI:
         assert response.id is not None
         assert len(response.content) > 0
 
-        # May contain thinking blocks
-        has_thinking = any(
-            hasattr(block, 'type') and block.type == 'thinking'
-            for block in response.content
-        )
         # Thinking may or may not appear for simple math
         # Just verify response is valid
         assert response.stop_reason in ["end_turn", "max_tokens"]

@@ -7,9 +7,8 @@ captures all console output to a debug log file when debug mode is enabled.
 import logging
 import io
 import re
-from typing import Any, Optional, TextIO
+from typing import Optional
 from rich.console import Console as RichConsole
-from rich.text import Text
 
 
 class DebugCapturingConsole(RichConsole):

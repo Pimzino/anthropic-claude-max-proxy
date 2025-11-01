@@ -5,9 +5,7 @@ This module provides common fixtures used across unit, integration, and smoke te
 import json
 import os
 import tempfile
-from pathlib import Path
-from typing import Dict, Any, AsyncGenerator
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -150,8 +148,6 @@ def mock_oauth_manager(valid_oauth_token):
 @pytest.fixture
 def mock_config_with_custom_models(temp_models_config_file, monkeypatch):
     """Mock settings to use temporary models.json file"""
-    import settings
-
     # Patch the models.json path
     monkeypatch.setattr('models.custom_models.MODELS_JSON_PATH', temp_models_config_file)
 

@@ -1,5 +1,4 @@
 """Integration tests for API endpoints"""
-import json
 from unittest.mock import patch, AsyncMock, MagicMock
 
 import pytest

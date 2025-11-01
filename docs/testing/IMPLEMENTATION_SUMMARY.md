@@ -209,7 +209,7 @@ make run-headless      # Start headless mode
 Created `.github/workflows/test.yml` with:
 
 **Test Job**:
-- Python version matrix (3.8, 3.9, 3.10, 3.11, 3.12)
+- Python version matrix (3.9, 3.10, 3.11, 3.12)
 - Automated dependency installation
 - Linting (ruff, black)
 - Unit test execution

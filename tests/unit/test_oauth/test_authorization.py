@@ -1,6 +1,6 @@
 """Tests for OAuth authorization URL construction"""
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from urllib.parse import urlparse, parse_qs
 
 from oauth.authorization import AuthorizationURLBuilder

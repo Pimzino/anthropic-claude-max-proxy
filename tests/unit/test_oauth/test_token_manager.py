@@ -1,7 +1,6 @@
 """Tests for OAuth token manager"""
 import pytest
 from unittest.mock import patch, AsyncMock
-import asyncio
 
 from oauth.token_manager import get_valid_token_async, get_valid_token
 from utils.storage import TokenStorage

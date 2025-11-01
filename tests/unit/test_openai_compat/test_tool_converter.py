@@ -1,6 +1,5 @@
 """Tests for tool/function call conversion"""
 import pytest
-import json
 
 from openai_compat.tool_converter import (
     convert_openai_tool_calls_to_anthropic,
