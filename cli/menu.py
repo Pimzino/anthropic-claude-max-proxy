@@ -11,7 +11,7 @@ def clear_screen(console):
 def display_header(console):
     """Display the application header"""
     console.print("=" * 50)
-    console.print("    Anthropic Claude Max Proxy", style="bold")
+    console.print("    LLM Subscription Proxy", style="bold")
     console.print("=" * 50)
 
 
@@ -35,7 +35,7 @@ def display_menu(storage, server_running: bool, bind_address: str, console):
     else:
         status_style = "red"
 
-    console.print(f" Auth Status: [{status_style}]{auth_status}[/{status_style}] ({auth_detail})")
+    console.print(f" Claude Auth: [{status_style}]{auth_status}[/{status_style}] ({auth_detail})")
 
     if server_running:
         console.print(f" Server Status: [green]RUNNING[/green] at http://{bind_address}:8081")
@@ -50,10 +50,40 @@ def display_menu(storage, server_running: bool, bind_address: str, console):
     else:
         console.print(" 1. Start Proxy Server")
 
-    console.print(" 2. Login / Re-authenticate")
-    console.print(" 3. Refresh Token")
-    console.print(" 4. Show Token Status")
-    console.print(" 5. Logout (Clear Tokens)")
-    console.print(" 6. Setup Long-Term Token")
-    console.print(" 7. Exit")
+    console.print(" 2. Authentication (Claude / ChatGPT)")
+    console.print(" 3. Show Token Status")
+    console.print(" 4. Exit")
+    console.print("=" * 50)
+
+
+def display_auth_menu(console):
+    """Display authentication submenu"""
+    console.print("\n" + "=" * 50)
+    console.print("    Authentication", style="bold")
+    console.print("=" * 50)
+    console.print(" 1. Anthropic Claude")
+    console.print(" 2. ChatGPT (OpenAI)")
+    console.print(" 3. Back to Main Menu")
+    console.print("=" * 50)
+
+
+def display_provider_auth_menu(provider: str, console):
+    """Display provider-specific authentication menu
+
+    Args:
+        provider: Provider name (e.g., "Claude", "ChatGPT")
+        console: Rich console for output
+    """
+    console.print("\n" + "=" * 50)
+    console.print(f"    {provider} Authentication", style="bold")
+    console.print("=" * 50)
+    console.print(" 1. Login / Re-authenticate")
+    console.print(" 2. Refresh Token")
+    console.print(" 3. Show Token Status")
+    console.print(" 4. Logout (Clear Tokens)")
+    if provider == "Claude":
+        console.print(" 5. Setup Long-Term Token")
+        console.print(" 6. Back to Authentication Menu")
+    else:
+        console.print(" 5. Back to Authentication Menu")
     console.print("=" * 50)
