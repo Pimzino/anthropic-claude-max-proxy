@@ -172,9 +172,9 @@ def convert_anthropic_content_to_openai(content: List[Dict[str, Any]]) -> tuple[
             # Note: redacted_thinking doesn't have text, so we don't add to reasoning_parts
 
     text_content = "".join(text_parts) if text_parts else None
-    tool_calls_result = tool_calls if tool_calls else None
+    tool_calls_result = tool_calls if tool_calls else []
     reasoning_content = "".join(reasoning_parts) if reasoning_parts else None
-    thinking_blocks_result = thinking_blocks if thinking_blocks else None
+    thinking_blocks_result = thinking_blocks if thinking_blocks else []
 
     logger.debug(f"[RESPONSE_CONVERSION] Conversion result:")
     logger.debug(f"[RESPONSE_CONVERSION]   - Text content: {text_content[:100] if text_content else 'None'}...")

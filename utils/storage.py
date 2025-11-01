@@ -10,8 +10,8 @@ from settings import TOKEN_FILE
 class TokenStorage:
     """Secure token storage with file permissions (plan.md sections 3.6 and 10)"""
 
-    def __init__(self):
-        self.token_path = Path(TOKEN_FILE)
+    def __init__(self, token_file: Optional[str] = None):
+        self.token_path = Path(token_file if token_file else TOKEN_FILE)
         self._ensure_secure_directory()
 
     def _ensure_secure_directory(self):
@@ -91,8 +91,16 @@ class TokenStorage:
             return True
 
         expires_at = tokens.get("expires_at", 0)
-        # Add 60 second buffer before expiry
-        return int(time.time()) >= (expires_at - 60)
+        # Add 5 second buffer before expiry
+        return int(time.time()) >= (expires_at - 5)
+
+    def is_authenticated(self) -> bool:
+        """Check if there is a valid, non-expired token"""
+        tokens = self.load_tokens()
+        if not tokens:
+            return False
+
+        return not self.is_token_expired()
 
     def get_token_type(self) -> Optional[str]:
         """Get the type of stored token (oauth_flow or long_term)"""
