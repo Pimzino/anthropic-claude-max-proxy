@@ -15,7 +15,7 @@ from chatgpt_oauth import (
     ChatGPTTokenStorage,
     AuthorizationURLBuilder,
     PKCEManager,
-    exchange_code_for_tokens_sync,
+    exchange_code_for_tokens,
 )
 from utils.debug_console import create_debug_console
 
@@ -131,7 +131,13 @@ class ChatGPTCLIAuthFlow:
             if hasattr(__main__, '_proxy_debug_logger'):
                 __main__._proxy_debug_logger.debug("[CHATGPT_AUTH] Exchanging authorization code for tokens")
 
-            auth_bundle = exchange_code_for_tokens_sync(code, self.pkce_manager)
+            try:
+                auth_bundle = await exchange_code_for_tokens(code, self.pkce_manager)
+            except Exception as e:
+                console.print(f"[red]Token exchange error: {e}[/red]")
+                if hasattr(__main__, '_proxy_debug_logger'):
+                    __main__._proxy_debug_logger.debug(f"[CHATGPT_AUTH] Token exchange error: {e}", exc_info=True)
+                return False
 
             if not auth_bundle:
                 console.print("[red]Failed to exchange code for tokens[/red]")

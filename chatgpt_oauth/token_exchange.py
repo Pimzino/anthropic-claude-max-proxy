@@ -50,14 +50,19 @@ async def exchange_code_for_tokens(
         "code_verifier": pkce_manager.code_verifier,
     }
 
+    logger.info(f"Exchanging authorization code for tokens at {TOKEN_ENDPOINT}")
+
     try:
         async with httpx.AsyncClient() as client:
+            logger.debug("Sending token exchange request...")
             response = await client.post(
                 TOKEN_ENDPOINT,
                 data=urlencode(data),
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
-                timeout=30.0
+                timeout=60.0  # Increased from 30 to 60 seconds
             )
+
+            logger.debug(f"Token exchange response status: {response.status_code}")
 
             if response.status_code != 200:
                 logger.error(f"Token exchange failed with status {response.status_code}: {response.text}")
@@ -65,6 +70,9 @@ async def exchange_code_for_tokens(
 
             payload = response.json()
 
+    except httpx.TimeoutException as e:
+        logger.error(f"Token exchange timed out after 60 seconds: {e}")
+        return None
     except httpx.RequestError as e:
         logger.error(f"Token exchange request failed: {e}")
         return None
@@ -142,7 +150,7 @@ def exchange_code_for_tokens_sync(
             loop
         )
         try:
-            return future.result(timeout=30)
+            return future.result(timeout=60)  # Increased from 30 to 60 seconds
         except concurrent.futures.TimeoutError:
             logger.error("Token exchange timed out")
             return None
