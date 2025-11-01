@@ -91,6 +91,23 @@ def _load_chatgpt_models() -> None:
         _register_model(entry)
         logger.debug(f"Registered ChatGPT model: {model_id}")
 
+        # Add openai- prefixed alias (not listed)
+        alias_entry = ModelRegistryEntry(
+            openai_id=f"openai-{model_id}",
+            anthropic_id="",
+            created=0,
+            owned_by=model_config["owned_by"],
+            context_length=model_config["context_length"],
+            max_completion_tokens=model_config["max_completion_tokens"],
+            reasoning_level=None,
+            reasoning_budget=None,
+            supports_vision=model_config.get("supports_vision", False),
+            use_1m_context=False,
+            include_in_listing=False,  # Hidden alias
+        )
+        _register_model(alias_entry)
+        logger.debug(f"Registered ChatGPT alias: openai-{model_id}")
+
     # Register reasoning effort variants if enabled
     if settings.CHATGPT_EXPOSE_REASONING_VARIANTS:
         reasoning_efforts = ["minimal", "low", "medium", "high"]
@@ -125,6 +142,23 @@ def _load_chatgpt_models() -> None:
 
                 _register_model(entry)
                 logger.debug(f"Registered ChatGPT reasoning variant: {variant_id}")
+
+                # Add openai- prefixed alias for reasoning variant
+                alias_variant_entry = ModelRegistryEntry(
+                    openai_id=f"openai-{variant_id}",
+                    anthropic_id="",
+                    created=0,
+                    owned_by=base_config["owned_by"],
+                    context_length=base_config["context_length"],
+                    max_completion_tokens=base_config["max_completion_tokens"],
+                    reasoning_level=effort,
+                    reasoning_budget=None,
+                    supports_vision=base_config.get("supports_vision", False),
+                    use_1m_context=False,
+                    include_in_listing=False,  # Hidden alias
+                )
+                _register_model(alias_variant_entry)
+                logger.debug(f"Registered ChatGPT reasoning alias: openai-{variant_id}")
 
 
 def _load_custom_models() -> None:
@@ -172,14 +206,22 @@ def is_custom_model(model_id: str) -> bool:
 def is_chatgpt_model(model_id: str) -> bool:
     """Check if a model ID is a ChatGPT model
 
+    Supports both official IDs (gpt-5, gpt-5-medium) and
+    openai- prefixed aliases (openai-gpt-5, openai-gpt-5-medium)
+
     Args:
         model_id: The model identifier
 
     Returns:
         True if the model is a ChatGPT model, False otherwise
     """
-    # Strip reasoning effort suffix if present
     model_lower = model_id.lower()
+
+    # Strip openai- prefix if present
+    if model_lower.startswith("openai-"):
+        model_lower = model_lower[7:]  # Remove "openai-"
+
+    # Strip reasoning effort suffix if present
     for effort in ["minimal", "low", "medium", "high"]:
         if model_lower.endswith(f"-{effort}"):
             model_lower = model_lower[:-len(f"-{effort}")]
