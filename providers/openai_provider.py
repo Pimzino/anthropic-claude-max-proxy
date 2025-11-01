@@ -3,11 +3,14 @@ OpenAI-compatible provider implementation.
 Handles requests to OpenAI API format endpoints.
 """
 import logging
-from typing import Dict, Any, Optional, AsyncIterator
+from typing import Dict, Any, Optional, AsyncIterator, TYPE_CHECKING
 import httpx
 
 from settings import REQUEST_TIMEOUT, STREAM_TIMEOUT, CONNECT_TIMEOUT, READ_TIMEOUT
 from providers.base_provider import BaseProvider
+
+if TYPE_CHECKING:
+    from stream_debug import StreamTracer
 
 logger = logging.getLogger(__name__)
 

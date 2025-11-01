@@ -103,7 +103,7 @@ def start_proxy_server(
         console.print("[bold cyan]Native Anthropic API:[/bold cyan]")
         console.print(f"  Base URL: http://{bind_address}:8081")
         console.print("  Endpoint: /v1/messages")
-        console.print(f"\n[bold cyan]OpenAI-Compatible API:[/bold cyan]")
+        console.print("\n[bold cyan]OpenAI-Compatible API:[/bold cyan]")
         console.print(f"  Base URL: http://{bind_address}:8081/v1")
         console.print("  Endpoint: /v1/chat/completions")
         console.print("\n[dim]API Key: any-placeholder-string[/dim]")

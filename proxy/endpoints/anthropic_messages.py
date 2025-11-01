@@ -134,10 +134,9 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
             logger.info(f"[{request_id}] Anthropic request completed in {elapsed_ms}ms status={response.status_code}")
 
             if response.status_code != 200:
-                # Return the exact error from Anthropic API
                 try:
                     error_json = response.json()
-                except:
+                except Exception:
                     # If not JSON, return raw text
                     error_json = {"error": {"type": "api_error", "message": response.text}}
 

@@ -5,7 +5,6 @@ import json
 import logging
 import time
 import uuid
-from typing import Dict, Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -17,7 +16,6 @@ from stream_debug import maybe_create_stream_tracer
 from anthropic import make_anthropic_request
 from openai_compat import convert_anthropic_response_to_openai
 from ..models import OpenAIChatCompletionRequest
-from ..logging_utils import log_request
 from ..handlers import (
     prepare_anthropic_request,
     create_openai_stream,
@@ -163,7 +161,7 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
                     # Return error in OpenAI format
                     try:
                         error_json = response.json()
-                    except:
+                    except Exception:
                         error_json = {
                             "error": {
                                 "message": response.text,
@@ -277,7 +275,7 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
                             "code": response.status_code
                         }
                     }
-                except:
+                except Exception:
                     openai_error = {
                         "error": {
                             "message": response.text,

@@ -2,7 +2,7 @@
 Request preparation and conversion logic.
 """
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from openai_compat import convert_openai_request_to_anthropic
 from anthropic import (
