@@ -1,20 +1,12 @@
 # Makefile for ccmaxproxy
 # Cross-platform commands for development and testing
 
-.PHONY: help test test-unit test-integration test-smoke test-cov test-watch lint format clean install dev-install run
+.PHONY: help lint format clean install dev-install run
 
 # Default target
 help:
 	@echo "ccmaxproxy Development Commands"
 	@echo "================================"
-	@echo ""
-	@echo "Testing:"
-	@echo "  make test              - Run all tests (unit + integration)"
-	@echo "  make test-unit         - Run unit tests only"
-	@echo "  make test-integration  - Run integration tests only"
-	@echo "  make test-smoke        - Run smoke tests (requires ANTHROPIC_OAUTH_TOKEN)"
-	@echo "  make test-cov          - Run tests with coverage report"
-	@echo "  make test-watch        - Auto-run tests on file changes"
 	@echo ""
 	@echo "Code Quality:"
 	@echo "  make lint              - Run linters (ruff, mypy)"
@@ -30,33 +22,6 @@ help:
 	@echo "  make run               - Start the proxy server"
 	@echo "  make run-headless      - Start in headless mode"
 	@echo ""
-
-# Testing
-test:
-	pytest tests/unit/ tests/integration/ -v
-
-test-unit:
-	pytest tests/unit/ -v -m unit
-
-test-integration:
-	pytest tests/integration/ -v -m integration
-
-test-smoke:
-	@echo "⚠️  WARNING: This will make real API calls!"
-	@echo "Make sure ANTHROPIC_OAUTH_TOKEN is set"
-	@echo ""
-	pytest tests/smoke/ -v -m smoke
-
-test-cov:
-	pytest --cov=. --cov-report=term-missing --cov-report=html --cov-report=json
-	@echo ""
-	@echo "📊 Coverage report generated:"
-	@echo "  - Terminal: See above"
-	@echo "  - HTML: htmlcov/index.html"
-	@echo "  - JSON: coverage.json"
-
-test-watch:
-	pytest-watch -- -v
 
 # Code Quality
 lint:
@@ -93,12 +58,8 @@ dev-install: install
 clean:
 	@echo "Cleaning build artifacts..."
 	rm -rf __pycache__
-	rm -rf .pytest_cache
 	rm -rf .mypy_cache
 	rm -rf .ruff_cache
-	rm -rf htmlcov
-	rm -rf .coverage
-	rm -rf coverage.json
 	rm -rf dist
 	rm -rf build
 	rm -rf *.egg-info

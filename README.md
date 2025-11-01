@@ -555,67 +555,6 @@ response = client.messages.create(
 
 These features provide compatibility with OpenAI's API format while leveraging Anthropic's extended thinking capabilities that are not available or not user friendly in Claude Code.
 
-## Testing
-
-The project includes a comprehensive test suite with unit, integration, and optional smoke tests.
-
-### Quick Start
-
-```powershell
-# Install development dependencies
-pip install -r requirements-dev.txt
-
-# Run all tests
-make test
-
-# Run with coverage report
-make test-cov
-```
-
-### Test Organization
-
-- **Unit Tests** (`tests/unit/`) - Fast, isolated component tests with mocked dependencies
-- **Integration Tests** (`tests/integration/`) - API endpoint and flow testing with TestClient
-- **Smoke Tests** (`tests/smoke/`) - Optional real API validation (requires OAuth token)
-
-### Running Specific Tests
-
-```powershell
-# Unit tests only (fast)
-make test-unit
-
-# Integration tests
-make test-integration
-
-# Smoke tests (requires ANTHROPIC_OAUTH_TOKEN)
-make test-smoke
-
-# Run specific test file
-pytest tests/unit/test_oauth/test_pkce.py -v
-```
-
-### Coverage Requirements
-
-The project maintains **80% code coverage** for critical components:
-- OAuth flow
-- Request/response converters
-- Model resolution
-- API endpoints
-
-View coverage report:
-```powershell
-make test-cov
-# Open htmlcov/index.html in your browser
-```
-
-### Documentation
-
-Comprehensive testing documentation available:
-- 📖 [Testing Guide](docs/testing/TESTING.md) - Running tests, commands, troubleshooting
-- 📝 [Writing Tests](docs/testing/WRITING_TESTS.md) - Contributor guide, patterns, best practices
-- 🏗️ [Test Architecture](docs/testing/TEST_ARCHITECTURE.md) - Structure, fixtures, coverage details
-- 📊 [Coverage Guide](docs/testing/COVERAGE.md) - Coverage requirements and analysis
-
 ## Configuration Priority
 
 1. Environment variables (highest)

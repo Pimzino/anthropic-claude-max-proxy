@@ -49,7 +49,6 @@ config.json
 !models.example.json
 !package.json
 !package-lock.json
-!tests/fixtures/*.json
 
 # Environment variables
 .env
