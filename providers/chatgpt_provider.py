@@ -324,7 +324,7 @@ class ChatGPTProvider(BaseProvider):
                         if openai_chunk:
                             chunk_str = f"data: {json.dumps(openai_chunk)}\n\n"
                             if tracer:
-                                tracer.log_translated_chunk(chunk_str)
+                                tracer.log_converted_chunk(chunk_str)
                             yield chunk_str
 
             except httpx.ReadTimeout:
