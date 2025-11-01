@@ -1,0 +1,138 @@
+{
+  "simple_text_response": {
+    "id": "msg_01AbCdEfGhIjKlMnOpQr",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "Hello! How can I help you today?"
+      }
+    ],
+    "model": "claude-sonnet-4-20250514",
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 10,
+      "output_tokens": 15
+    }
+  },
+  
+  "tool_use_response": {
+    "id": "msg_02ToolUseExample123",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "I'll check the weather for you."
+      },
+      {
+        "type": "tool_use",
+        "id": "toolu_01ABC123",
+        "name": "get_weather",
+        "input": {
+          "location": "San Francisco, CA"
+        }
+      }
+    ],
+    "model": "claude-sonnet-4-20250514",
+    "stop_reason": "tool_use",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 50,
+      "output_tokens": 45
+    }
+  },
+  
+  "thinking_response": {
+    "id": "msg_03ThinkingExample",
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "thinking",
+        "thinking": "Let me analyze this problem step by step. First, I need to understand what the user is asking..."
+      },
+      {
+        "type": "text",
+        "text": "Based on my analysis, here's the solution..."
+      }
+    ],
+    "model": "claude-sonnet-4-20250514",
+    "stop_reason": "end_turn",
+    "stop_sequence": null,
+    "usage": {
+      "input_tokens": 100,
+      "output_tokens": 150
+    }
+  },
+  
+  "streaming_events": [
+    {
+      "type": "message_start",
+      "message": {
+        "id": "msg_stream_01",
+        "type": "message",
+        "role": "assistant",
+        "content": [],
+        "model": "claude-sonnet-4-20250514",
+        "stop_reason": null,
+        "stop_sequence": null,
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 0
+        }
+      }
+    },
+    {
+      "type": "content_block_start",
+      "index": 0,
+      "content_block": {
+        "type": "text",
+        "text": ""
+      }
+    },
+    {
+      "type": "content_block_delta",
+      "index": 0,
+      "delta": {
+        "type": "text_delta",
+        "text": "Hello"
+      }
+    },
+    {
+      "type": "content_block_delta",
+      "index": 0,
+      "delta": {
+        "type": "text_delta",
+        "text": " world!"
+      }
+    },
+    {
+      "type": "content_block_stop",
+      "index": 0
+    },
+    {
+      "type": "message_delta",
+      "delta": {
+        "stop_reason": "end_turn",
+        "stop_sequence": null
+      },
+      "usage": {
+        "output_tokens": 10
+      }
+    },
+    {
+      "type": "message_stop"
+    }
+  ],
+  
+  "error_response": {
+    "type": "error",
+    "error": {
+      "type": "invalid_request_error",
+      "message": "messages: field required"
+    }
+  }
+}

@@ -140,7 +140,7 @@ def convert_anthropic_content_to_openai(content: List[Dict[str, Any]]) -> tuple[
             tool_name = block.get("name", "")
             tool_input = block.get("input", {})
 
-            logger.debug(f"[RESPONSE_CONVERSION]   - Tool use block:")
+            logger.debug("[RESPONSE_CONVERSION]   - Tool use block:")
             logger.debug(f"[RESPONSE_CONVERSION]     - ID: {tool_id}")
             logger.debug(f"[RESPONSE_CONVERSION]     - Name: {tool_name}")
             logger.debug(f"[RESPONSE_CONVERSION]     - Input: {json.dumps(tool_input, indent=2)}")
@@ -167,7 +167,7 @@ def convert_anthropic_content_to_openai(content: List[Dict[str, Any]]) -> tuple[
 
         elif block_type == "redacted_thinking":
             # Extract redacted thinking (no text content, but still a thinking block)
-            logger.debug(f"[RESPONSE_CONVERSION]   - Redacted thinking block")
+            logger.debug("[RESPONSE_CONVERSION]   - Redacted thinking block")
             thinking_blocks.append(block)
             # Note: redacted_thinking doesn't have text, so we don't add to reasoning_parts
 
@@ -176,7 +176,7 @@ def convert_anthropic_content_to_openai(content: List[Dict[str, Any]]) -> tuple[
     reasoning_content = "".join(reasoning_parts) if reasoning_parts else None
     thinking_blocks_result = thinking_blocks if thinking_blocks else []
 
-    logger.debug(f"[RESPONSE_CONVERSION] Conversion result:")
+    logger.debug("[RESPONSE_CONVERSION] Conversion result:")
     logger.debug(f"[RESPONSE_CONVERSION]   - Text content: {text_content[:100] if text_content else 'None'}...")
     logger.debug(f"[RESPONSE_CONVERSION]   - Tool calls: {len(tool_calls_result) if tool_calls_result else 0}")
     logger.debug(f"[RESPONSE_CONVERSION]   - Reasoning content: {len(reasoning_content) if reasoning_content else 0} chars")

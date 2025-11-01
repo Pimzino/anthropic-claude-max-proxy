@@ -84,7 +84,7 @@ def convert_openai_tools_to_anthropic(openai_tools: Optional[List[Dict[str, Any]
             tool_description = function.get("description", "")
             tool_parameters = function.get("parameters", {})
 
-            logger.debug(f"[TOOLS_SCHEMA]   - Converting OpenAI function tool")
+            logger.debug("[TOOLS_SCHEMA]   - Converting OpenAI function tool")
             logger.debug(f"[TOOLS_SCHEMA]     - Name: {tool_name}")
             logger.debug(f"[TOOLS_SCHEMA]     - Description: {tool_description}")
             logger.debug(f"[TOOLS_SCHEMA]     - Parameters schema: {json.dumps(tool_parameters, indent=2)}")

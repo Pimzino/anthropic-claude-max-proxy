@@ -3,7 +3,7 @@ Request conversion from OpenAI to Anthropic format.
 """
 import json
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from models import REASONING_BUDGET_MAP, resolve_model_metadata
 from utils.thinking_cache import THINKING_CACHE
@@ -223,7 +223,6 @@ def convert_openai_request_to_anthropic(openai_request: Dict[str, Any]) -> Dict[
         # 1. There's no last assistant message, OR
         # 2. The last assistant message doesn't have tool_use, OR
         # 3. The last assistant message starts with thinking (we just prepended it from cache)
-        can_enable_thinking = True
         last_assistant_has_tools = _last_assistant_has_tool_use(anthropic_request["messages"]) if anthropic_request.get("messages") else False
         last_assistant_has_thinking = _last_assistant_starts_with_thinking(anthropic_request["messages"]) if anthropic_request.get("messages") else False
 

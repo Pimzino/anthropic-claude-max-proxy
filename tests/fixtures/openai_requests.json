@@ -1,0 +1,160 @@
+{
+  "simple_chat": {
+    "model": "claude-sonnet-4-20250514",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello, how are you?"
+      }
+    ],
+    "max_tokens": 1000
+  },
+  
+  "with_system_message": {
+    "model": "claude-sonnet-4-20250514",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a helpful assistant."
+      },
+      {
+        "role": "user",
+        "content": "What is the capital of France?"
+      }
+    ],
+    "max_tokens": 500,
+    "temperature": 0.7
+  },
+  
+  "with_tools": {
+    "model": "claude-sonnet-4-20250514",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What's the weather in New York?"
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "get_weather",
+          "description": "Get the current weather in a location",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "location": {
+                "type": "string",
+                "description": "The city and state, e.g. San Francisco, CA"
+              },
+              "unit": {
+                "type": "string",
+                "enum": ["celsius", "fahrenheit"]
+              }
+            },
+            "required": ["location"]
+          }
+        }
+      }
+    ],
+    "max_tokens": 1000
+  },
+  
+  "with_reasoning": {
+    "model": "claude-sonnet-4-20250514",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve this complex logic puzzle: ..."
+      }
+    ],
+    "reasoning_effort": "high",
+    "max_tokens": 4000
+  },
+  
+  "reasoning_model_variant": {
+    "model": "claude-sonnet-4-20250514-reasoning-medium",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Analyze this problem deeply."
+      }
+    ],
+    "max_tokens": 3000
+  },
+  
+  "1m_context_variant": {
+    "model": "claude-sonnet-4-20250514-1m",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Process this large document..."
+      }
+    ],
+    "max_tokens": 2000
+  },
+  
+  "with_vision": {
+    "model": "claude-sonnet-4-20250514",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What's in this image?"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/jpeg;base64,/9j/4AAQSkZJRg..."
+            }
+          }
+        ]
+      }
+    ],
+    "max_tokens": 1000
+  },
+  
+  "streaming_request": {
+    "model": "claude-sonnet-4-20250514",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Tell me a story."
+      }
+    ],
+    "stream": true,
+    "max_tokens": 2000
+  },
+  
+  "tool_result": {
+    "model": "claude-sonnet-4-20250514",
+    "messages": [
+      {
+        "role": "user",
+        "content": "What's the weather?"
+      },
+      {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_abc123",
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "arguments": "{\"location\": \"Boston\"}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_abc123",
+        "content": "{\"temperature\": 72, \"condition\": \"sunny\"}"
+      }
+    ],
+    "max_tokens": 500
+  }
+}

@@ -105,8 +105,8 @@ def start_proxy_server(
         console.print("  Endpoint: /v1/messages")
         console.print(f"\n[bold cyan]OpenAI-Compatible API:[/bold cyan]")
         console.print(f"  Base URL: http://{bind_address}:8081/v1")
-        console.print(f"  Endpoint: /v1/chat/completions")
-        console.print(f"\n[dim]API Key: any-placeholder-string[/dim]")
+        console.print("  Endpoint: /v1/chat/completions")
+        console.print("\n[dim]API Key: any-placeholder-string[/dim]")
 
         if debug and hasattr(__main__, '_proxy_debug_logger'):
             __main__._proxy_debug_logger.debug(f"[CLI] Proxy server started successfully at {bind_address}:8081")

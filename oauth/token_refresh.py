@@ -1,7 +1,6 @@
 """OAuth token refresh functionality"""
 
 import logging
-from typing import Optional
 
 import httpx
 
