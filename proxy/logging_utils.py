@@ -41,3 +41,4 @@ def log_request(request_id: str, request_data: Dict[str, Any], endpoint: str, he
         logger.debug(f"[{request_id}] ALTERNATIVE THINKING FIELDS: {detected_fields}")
 
 
+
