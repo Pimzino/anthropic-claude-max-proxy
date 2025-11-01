@@ -6,6 +6,8 @@ from rich.prompt import Confirm
 from utils.storage import TokenStorage
 from oauth import OAuthManager
 from auth_cli import CLIAuthFlow
+from chatgpt_oauth import ChatGPTOAuthManager, ChatGPTTokenStorage
+from chatgpt_auth_cli import ChatGPTCLIAuthFlow
 
 
 def check_and_refresh_auth(
@@ -76,6 +78,74 @@ def check_and_refresh_auth(
         return False, "UNKNOWN_ERROR", f"Token refresh failed: {str(e)}. Please login (option 2)"
 
 
+def check_and_refresh_chatgpt_auth(
+    storage: ChatGPTTokenStorage,
+    oauth: ChatGPTOAuthManager,
+    loop,
+    console,
+    debug: bool = False
+) -> tuple[bool, str, str]:
+    """
+    Check ChatGPT authentication status and attempt refresh if needed
+
+    Args:
+        storage: ChatGPTTokenStorage instance
+        oauth: ChatGPTOAuthManager instance
+        loop: Event loop for async operations
+        console: Rich console for output
+        debug: Whether debug mode is enabled
+
+    Returns:
+        Tuple of (success: bool, status: str, message: str)
+    """
+    # Get the current token status
+    status = storage.get_status()
+
+    # No tokens at all
+    if not status["has_tokens"]:
+        return False, "NO_AUTH", "No ChatGPT authentication tokens found. Please login first"
+
+    # Token is still valid
+    if not status["is_expired"]:
+        return True, "VALID", f"Token valid for: {status['time_until_expiry']}"
+
+    # Token is expired - check for refresh token
+    refresh_token = storage.get_refresh_token()
+    if not refresh_token:
+        return False, "NO_REFRESH", "Token expired and no refresh token available. Please login again"
+
+    # Attempt to refresh the token
+    console.print("[yellow]ChatGPT token expired, attempting automatic refresh...[/yellow]")
+
+    try:
+        # Run the async refresh_tokens method using the event loop
+        success = loop.run_until_complete(oauth.refresh_tokens())
+
+        if success:
+            # Get updated status after refresh
+            new_status = storage.get_status()
+            time_remaining = new_status.get("time_until_expiry", "unknown")
+            return True, "REFRESHED", f"Automatically refreshed expired token. Token valid for: {time_remaining}"
+        else:
+            # Refresh failed but we don't know why (generic failure)
+            return False, "REFRESH_FAILED", "Refresh token invalid or expired. Please login again"
+
+    except httpx.NetworkError:
+        return False, "NETWORK_ERROR", "Network error during token refresh. Check connection and retry"
+
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code in (401, 403):
+            return False, "INVALID_TOKEN", "Refresh token invalid or expired. Please login again"
+        elif 500 <= e.response.status_code < 600:
+            return False, "SERVER_ERROR", f"Server error during token refresh (HTTP {e.response.status_code}). Try again later"
+        else:
+            return False, "HTTP_ERROR", f"Token refresh failed (HTTP {e.response.status_code}). Please login"
+
+    except Exception as e:
+        # Unknown error
+        return False, "UNKNOWN_ERROR", f"Token refresh failed: {str(e)}. Please login"
+
+
 def login(auth_flow: CLIAuthFlow, loop, console, debug: bool = False):
     """
     Handle the login flow
@@ -109,6 +179,44 @@ def login(auth_flow: CLIAuthFlow, loop, console, debug: bool = False):
         console.print(f"[red]ERROR:[/red] {e}")
         if debug and hasattr(__main__, '_proxy_debug_logger'):
             __main__._proxy_debug_logger.debug(f"[CLI] Authentication error: {e}")
+
+    console.print("\nPress Enter to continue...")
+    input()
+
+
+def login_chatgpt(auth_flow: ChatGPTCLIAuthFlow, loop, console, debug: bool = False):
+    """
+    Handle the ChatGPT login flow
+
+    Args:
+        auth_flow: ChatGPTCLIAuthFlow instance
+        loop: Event loop for async operations
+        console: Rich console for output
+        debug: Whether debug mode is enabled
+    """
+    console.print("Starting ChatGPT OAuth login flow...")
+
+    try:
+        # Log authentication attempt
+        if debug and hasattr(__main__, '_proxy_debug_logger'):
+            __main__._proxy_debug_logger.debug("[CLI] Starting ChatGPT authentication flow")
+
+        # Use the event loop to run the async authenticate method
+        success = loop.run_until_complete(auth_flow.authenticate())
+
+        if success:
+            console.print("[green]ChatGPT authentication successful![/green]")
+            if debug and hasattr(__main__, '_proxy_debug_logger'):
+                __main__._proxy_debug_logger.debug("[CLI] ChatGPT authentication successful")
+        else:
+            console.print("[red]ChatGPT authentication failed[/red]")
+            if debug and hasattr(__main__, '_proxy_debug_logger'):
+                __main__._proxy_debug_logger.debug("[CLI] ChatGPT authentication failed")
+
+    except Exception as e:
+        console.print(f"[red]ERROR:[/red] {e}")
+        if debug and hasattr(__main__, '_proxy_debug_logger'):
+            __main__._proxy_debug_logger.debug(f"[CLI] ChatGPT authentication error: {e}")
 
     console.print("\nPress Enter to continue...")
     input()
@@ -173,6 +281,64 @@ def refresh_token(
     input()
 
 
+def refresh_chatgpt_token(
+    storage: ChatGPTTokenStorage,
+    oauth: ChatGPTOAuthManager,
+    loop,
+    console,
+    debug: bool = False
+):
+    """
+    Attempt to refresh the ChatGPT access token
+
+    Args:
+        storage: ChatGPTTokenStorage instance
+        oauth: ChatGPTOAuthManager instance
+        loop: Event loop for async operations
+        console: Rich console for output
+        debug: Whether debug mode is enabled
+    """
+    console.print("Attempting to refresh ChatGPT token...")
+
+    if debug and hasattr(__main__, '_proxy_debug_logger'):
+        __main__._proxy_debug_logger.debug("[CLI] Manual ChatGPT token refresh requested")
+
+    # Check if we have a refresh token first
+    if not storage.get_refresh_token():
+        console.print("[red]No refresh token available - please login first[/red]")
+        if debug and hasattr(__main__, '_proxy_debug_logger'):
+            __main__._proxy_debug_logger.debug("[CLI] No refresh token available for manual refresh")
+        console.print("\nPress Enter to continue...")
+        input()
+        return
+
+    try:
+        success = loop.run_until_complete(oauth.refresh_tokens())
+
+        if success:
+            console.print("[green]ChatGPT token refreshed successfully![/green]")
+            # Show updated token status
+            status = storage.get_status()
+            time_remaining = status.get("time_until_expiry", "unknown")
+            console.print(f"Token valid for: {time_remaining}")
+            if debug and hasattr(__main__, '_proxy_debug_logger'):
+                __main__._proxy_debug_logger.debug(f"[CLI] Manual ChatGPT token refresh successful - valid for {time_remaining}")
+        else:
+            console.print("[red]ChatGPT token refresh failed - please login again[/red]")
+            console.print("This usually happens when the refresh token has expired.")
+            if debug and hasattr(__main__, '_proxy_debug_logger'):
+                __main__._proxy_debug_logger.debug("[CLI] Manual ChatGPT token refresh failed")
+
+    except Exception as e:
+        console.print(f"[red]ERROR:[/red] ChatGPT token refresh failed: {e}")
+        console.print("Please try logging in again")
+        if debug and hasattr(__main__, '_proxy_debug_logger'):
+            __main__._proxy_debug_logger.debug(f"[CLI] Manual ChatGPT token refresh error: {e}")
+
+    console.print("\nPress Enter to continue...")
+    input()
+
+
 def logout(storage: TokenStorage, console, debug: bool = False):
     """
     Clear stored tokens
@@ -201,6 +367,39 @@ def logout(storage: TokenStorage, console, debug: bool = False):
         console.print("Logout cancelled")
         if debug and hasattr(__main__, '_proxy_debug_logger'):
             __main__._proxy_debug_logger.debug("[CLI] User cancelled logout")
+
+    console.print("\nPress Enter to continue...")
+    input()
+
+
+def logout_chatgpt(storage: ChatGPTTokenStorage, console, debug: bool = False):
+    """
+    Clear stored ChatGPT tokens
+
+    Args:
+        storage: ChatGPTTokenStorage instance
+        console: Rich console for output
+        debug: Whether debug mode is enabled
+    """
+    if debug and hasattr(__main__, '_proxy_debug_logger'):
+        __main__._proxy_debug_logger.debug("[CLI] ChatGPT logout confirmation requested")
+
+    if Confirm.ask("Are you sure you want to clear all ChatGPT tokens?"):
+        if debug and hasattr(__main__, '_proxy_debug_logger'):
+            __main__._proxy_debug_logger.debug("[CLI] User confirmed ChatGPT logout")
+        try:
+            storage.clear_tokens()
+            console.print("[green]ChatGPT tokens cleared successfully[/green]")
+            if debug and hasattr(__main__, '_proxy_debug_logger'):
+                __main__._proxy_debug_logger.debug("[CLI] ChatGPT tokens cleared successfully")
+        except Exception as e:
+            console.print(f"[red]ERROR:[/red] {e}")
+            if debug and hasattr(__main__, '_proxy_debug_logger'):
+                __main__._proxy_debug_logger.debug(f"[CLI] ChatGPT logout error: {e}")
+    else:
+        console.print("Logout cancelled")
+        if debug and hasattr(__main__, '_proxy_debug_logger'):
+            __main__._proxy_debug_logger.debug("[CLI] User cancelled ChatGPT logout")
 
     console.print("\nPress Enter to continue...")
     input()

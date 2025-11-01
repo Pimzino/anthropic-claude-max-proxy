@@ -10,7 +10,9 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from oauth import OAuthManager
-from models import is_custom_model, get_custom_model_config
+from models import is_custom_model, is_chatgpt_model, get_custom_model_config
+from chatgpt_oauth import ChatGPTOAuthManager
+from providers.chatgpt_provider import ChatGPTProvider
 import settings
 from stream_debug import maybe_create_stream_tracer
 from anthropic import make_anthropic_request
@@ -28,6 +30,7 @@ router = APIRouter()
 
 # Global instances
 oauth_manager = OAuthManager()
+chatgpt_oauth_manager = ChatGPTOAuthManager()
 
 
 @router.post("/v1/chat/completions")
@@ -91,7 +94,96 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
 
     # Log model routing decision
     is_custom = is_custom_model(request.model)
-    logger.info(f"[{request_id}] Model: {request.model} | Custom: {is_custom} | Routing to: {'custom provider' if is_custom else 'Anthropic'}")
+    is_chatgpt = is_chatgpt_model(request.model)
+
+    if is_chatgpt:
+        logger.info(f"[{request_id}] Model: {request.model} | ChatGPT: True | Routing to: ChatGPT Responses API")
+    elif is_custom:
+        logger.info(f"[{request_id}] Model: {request.model} | Custom: True | Routing to: custom provider")
+    else:
+        logger.info(f"[{request_id}] Model: {request.model} | Routing to: Anthropic")
+
+    # Check if this is a ChatGPT model
+    if is_chatgpt_model(request.model):
+        logger.info(f"[{request_id}] Routing to ChatGPT for model: {request.model}")
+
+        try:
+            # Create ChatGPT provider
+            chatgpt_provider = ChatGPTProvider(oauth_manager=chatgpt_oauth_manager)
+
+            # Pass request directly to ChatGPT provider (handles OpenAI → Responses API conversion)
+            openai_request_dict = request.model_dump()
+
+            if request.stream:
+                # Handle streaming response
+                logger.debug(f"[{request_id}] Initiating streaming request to ChatGPT")
+
+                tracer = maybe_create_stream_tracer(
+                    request_id=request_id,
+                    endpoint="openai-chat",
+                    model=request.model,
+                    stream_type="chatgpt"
+                )
+
+                async def chatgpt_stream_generator():
+                    try:
+                        async for chunk in chatgpt_provider.stream_response(
+                            openai_request_dict,
+                            request_id,
+                            tracer=tracer
+                        ):
+                            yield chunk
+                    except Exception as e:
+                        logger.error(f"[{request_id}] ChatGPT stream error: {e}", exc_info=True)
+                        error_chunk = f'data: {{"error": {{"message": "ChatGPT stream error: {str(e)}"}}}}\n\n'
+                        yield error_chunk
+                    finally:
+                        if tracer:
+                            tracer.close()
+
+                return StreamingResponse(
+                    chatgpt_stream_generator(),
+                    media_type="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "Connection": "keep-alive",
+                        "X-Accel-Buffering": "no",
+                    }
+                )
+
+            else:
+                # Handle non-streaming response
+                logger.debug(f"[{request_id}] Initiating non-streaming request to ChatGPT")
+
+                response = await chatgpt_provider.make_request(
+                    openai_request_dict,
+                    request_id
+                )
+
+                if response.status_code != 200:
+                    error_body = response.json() if response.content else {"error": {"message": "ChatGPT API error"}}
+                    logger.error(f"[{request_id}] ChatGPT error {response.status_code}: {error_body}")
+                    raise HTTPException(
+                        status_code=response.status_code,
+                        detail=error_body
+                    )
+
+                # Return ChatGPT response directly (already in OpenAI format)
+                return response.json()
+
+        except ValueError as e:
+            # OAuth credential error
+            logger.error(f"[{request_id}] ChatGPT OAuth error: {e}")
+            raise HTTPException(
+                status_code=401,
+                detail={"error": {"message": str(e)}}
+            )
+        except Exception as e:
+            logger.error(f"[{request_id}] ChatGPT request failed: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail={"error": {"message": f"ChatGPT request failed: {str(e)}"}}
+            )
 
     # Check if this is a custom model (non-Anthropic)
     if is_custom_model(request.model):

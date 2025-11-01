@@ -3,7 +3,14 @@
 from .reasoning import REASONING_BUDGET_MAP
 from .specifications import BaseModelSpec, ModelRegistryEntry, BASE_MODELS
 from .registry import MODEL_REGISTRY, OPENAI_MODELS_LIST
-from .custom_models import CUSTOM_MODELS_CONFIG, is_custom_model, get_custom_model_config
+from .custom_models import (
+    CUSTOM_MODELS_CONFIG,
+    CHATGPT_MODELS_CONFIG,
+    is_custom_model,
+    is_chatgpt_model,
+    get_custom_model_config,
+    get_chatgpt_model_config,
+)
 from .resolution import resolve_model_metadata
 
 __all__ = [
@@ -14,7 +21,10 @@ __all__ = [
     "MODEL_REGISTRY",
     "OPENAI_MODELS_LIST",
     "CUSTOM_MODELS_CONFIG",
+    "CHATGPT_MODELS_CONFIG",
     "is_custom_model",
+    "is_chatgpt_model",
     "get_custom_model_config",
+    "get_chatgpt_model_config",
     "resolve_model_metadata",
 ]

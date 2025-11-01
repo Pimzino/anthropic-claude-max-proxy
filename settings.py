@@ -60,3 +60,15 @@ TOKEN_FILE = config.get("TOKEN_FILE", str(Path.home() / ".anthropic-claude-max-p
 # Headless mode configuration
 # Long-term OAuth token from environment (e.g., from claude setup-token)
 ANTHROPIC_OAUTH_TOKEN = os.getenv("ANTHROPIC_OAUTH_TOKEN", None)
+
+# ChatGPT OAuth configuration (hardcoded - not user configurable)
+# Uses OpenAI OAuth issuer for ChatGPT Plus/Pro authentication
+CHATGPT_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
+CHATGPT_OAUTH_ISSUER = "https://auth.openai.com"
+CHATGPT_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
+CHATGPT_TOKEN_FILE = str(Path.home() / ".chatgpt-local" / "tokens.json")
+
+# ChatGPT model defaults
+CHATGPT_DEFAULT_REASONING_EFFORT = config.get("CHATGPT_DEFAULT_REASONING_EFFORT", "medium")
+CHATGPT_DEFAULT_REASONING_SUMMARY = config.get("CHATGPT_DEFAULT_REASONING_SUMMARY", "auto")
+CHATGPT_EXPOSE_REASONING_VARIANTS = config.get("CHATGPT_EXPOSE_REASONING_VARIANTS", True)

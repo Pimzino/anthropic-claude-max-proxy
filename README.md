@@ -1,6 +1,15 @@
-# Anthropic Claude Max Proxy
+# LLM Subscription Proxy
 
-Pure Anthropic proxy for Claude Pro/Max subscriptions using OAuth.
+OpenAI-compatible proxy for Claude Pro/Max and ChatGPT Plus/Pro subscriptions using OAuth.
+
+## Overview
+
+Access your Claude and ChatGPT subscriptions through a unified OpenAI-compatible API. Route requests to multiple providers through a single endpoint without changing your client configuration.
+
+**Supported Providers:**
+- 🤖 **Anthropic Claude** (Pro/Max via OAuth)
+- 💬 **ChatGPT** (Plus/Pro via OAuth)
+- 🔌 **Custom Providers** (any OpenAI-compatible API)
 
 ## SUPPORT MY WORK
 <a href="https://buymeacoffee.com/Pimzino" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
@@ -10,17 +19,19 @@ Pure Anthropic proxy for Claude Pro/Max subscriptions using OAuth.
 **FOR EDUCATIONAL PURPOSES ONLY**
 
 This tool:
-- Is NOT affiliated with or endorsed by Anthropic
-- Uses undocumented OAuth flows from Claude Code (OpenCode)
-- May violate Anthropic's Terms of Service
+- Is NOT affiliated with or endorsed by Anthropic or OpenAI
+- Uses undocumented OAuth flows from Claude Code and ChatGPT Codex
+- May violate Terms of Service
 - Could stop working at any time without notice
 - Comes with NO WARRANTY or support
 
 **USE AT YOUR OWN RISK. The authors assume no liability for any consequences.**
 
-For official access, use Claude Code or Anthropic's API with console API keys.
+For official access, use official APIs with console API keys.
 
 ## Implementation Details
+
+### Anthropic Claude
 
 This proxy is aligned with the [OpenCode](https://github.com/anthropics/opencode) implementation:
 
@@ -47,9 +58,42 @@ This proxy is aligned with the [OpenCode](https://github.com/anthropics/opencode
 - Automatic ephemeral cache control on system messages
 - Automatic caching on the last 2 user messages for optimal performance
 
+### ChatGPT
+
+This proxy uses the ChatGPT Codex OAuth flow:
+
+**API Endpoint:**
+- Base URL: `https://chatgpt.com/backend-api/codex/responses`
+- Uses Responses API format (converted from OpenAI format)
+
+**OAuth Flow (Plus/Pro authentication):**
+1. User authorizes via `https://auth.openai.com/oauth/authorize`
+2. Redirects to `http://localhost:1455/auth/callback`
+3. Authorization code exchanged at `https://auth.openai.com/oauth/token`
+4. OAuth access token used with Bearer authorization for all requests
+
+**Authentication:**
+- Uses OAuth Bearer tokens with `authorization: Bearer <token>` header
+- Includes `chatgpt-account-id` header for account identification
+- Tokens stored separately in `~/.chatgpt-local/tokens.json`
+
+**Features:**
+- Session-based prompt caching for efficiency
+- Reasoning support with configurable effort levels (minimal/low/medium/high)
+- Reasoning summaries (auto/concise/detailed/none)
+- Vision support (text and image inputs)
+- Tool/function calling support
+
+**Model Specifications:**
+- **GPT-5**: 400K context, 128K max output, reasoning + vision
+- **GPT-5-Codex**: 400K context, 128K max output, coding-optimized
+- **Codex-Mini**: 128K context, 16K max output, faster variant
+
 ## Prerequisites
 
-- Active Claude Pro or Claude Max subscription
+- **For Claude models:** Active Claude Pro or Claude Max subscription
+- **For ChatGPT models:** Active ChatGPT Plus or ChatGPT Pro subscription
+- **For custom models:** API keys from your chosen providers
 - Python 3.9+
 - pip
 
@@ -80,10 +124,11 @@ python cli.py --bind 127.0.0.1
 ```
 
 5. **Authenticate:**
-- Select option 2 (Login)
+- Select option 2 (Authentication)
+- Choose provider (Anthropic Claude or ChatGPT)
 - Browser opens automatically
-- Complete login at claude.ai
-- Copy the authorization code
+- Complete login at claude.ai or auth.openai.com
+- Copy/paste the authorization code or callback URL
 - Paste in terminal
 
 6. **Start proxy:**
@@ -239,25 +284,56 @@ When running in headless mode:
 
 ## Client Configuration
 
-The proxy supports **two API formats**:
+The proxy supports **OpenAI-compatible API format** for all providers:
 
-### Native Anthropic API
-
-Configure your Anthropic API client:
-
-- **Base URL:** `http://<proxy-host>:8081`
-- **API Key:** Any non-empty string (e.g., "dummy")
-- **Model:** `claude-sonnet-4-20250514` (or any available Claude model)
-- **Endpoint:** `/v1/messages`
-
-### OpenAI-Compatible API
+### OpenAI-Compatible API (Recommended)
 
 Configure your OpenAI API client:
 
 - **Base URL:** `http://<proxy-host>:8081/v1`
 - **API Key:** Any non-empty string (e.g., "dummy")
-- **Model:** Use actual Claude model names (e.g., `claude-sonnet-4-20250514`)
+- **Models:**
+  - Claude: `claude-sonnet-4-20250514`, `claude-opus-4-20250514`, etc.
+  - ChatGPT: `gpt-5`, `gpt-5-codex`, `codex-mini-latest`, etc.
+  - Custom: Your configured model IDs
 - **Endpoint:** `/v1/chat/completions`
+
+**Example:**
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="dummy",
+    base_url="http://localhost:8081/v1"
+)
+
+# Use Claude
+response = client.chat.completions.create(
+    model="claude-sonnet-4-20250514",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+
+# Use ChatGPT
+response = client.chat.completions.create(
+    model="gpt-5",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+
+# Use custom model
+response = client.chat.completions.create(
+    model="glm-4.6",
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+```
+
+### Native Anthropic API
+
+For Claude-specific features, use the native Anthropic format:
+
+- **Base URL:** `http://<proxy-host>:8081`
+- **API Key:** Any non-empty string (e.g., "dummy")
+- **Model:** `claude-sonnet-4-20250514` (or any available Claude model)
+- **Endpoint:** `/v1/messages`
 
 The OpenAI compatibility layer supports:
 - ✅ Chat completions (streaming and non-streaming)
@@ -269,11 +345,26 @@ The OpenAI compatibility layer supports:
 
 ## Available Models
 
-- Supports all Anthropic Models that you have access to with your Claude Pro / Max subscription.
+### Anthropic Claude Models
+All Claude models available with your Pro/Max subscription:
+- `claude-sonnet-4-20250514`
+- `claude-opus-4-20250514`
+- `claude-haiku-4-20250514`
+- Plus reasoning and 1M context variants
+
+### ChatGPT Models
+All GPT models available with your Plus/Pro subscription:
+- `gpt-5` (400K context, 128K output)
+- `gpt-5-codex` (optimized for coding)
+- `codex-mini-latest` (faster, smaller variant)
+- Plus reasoning variants: `-minimal`, `-low`, `-medium`, `-high`
+
+### Custom Models
+Any OpenAI-compatible models configured in `models.json`
 
 ## Custom Models Configuration
 
-The proxy now supports routing requests to **custom OpenAI-compatible providers** (like Z.AI, OpenRouter, etc.) alongside Anthropic models. This allows you to use multiple providers through a single proxy endpoint without changing your client configuration.
+Beyond Claude and ChatGPT, the proxy supports routing requests to **additional OpenAI-compatible providers** (like Z.AI, OpenRouter, etc.). This allows you to use multiple providers through a single proxy endpoint.
 
 ### Setup
 
@@ -316,7 +407,7 @@ Edit `models.json` and add your custom model configurations:
 
 ### Usage
 
-Once configured, custom models appear in the `/v1/models` endpoint and can be used just like Anthropic models:
+Once configured, custom models appear in the `/v1/models` endpoint alongside Claude and ChatGPT models:
 
 ```python
 # Using Z.AI GLM-4.6 through the proxy
@@ -328,11 +419,11 @@ response = client.chat.completions.create(
 
 ### How It Works
 
-- **Custom models bypass Anthropic-specific processing** (no OAuth, no Claude Code spoofing, no prompt caching)
-- Requests are passed directly to the configured endpoint in OpenAI format
-- Each custom model uses its own API key (no OAuth required)
-- Supports both streaming and non-streaming requests
-- Custom models appear alongside Anthropic models in `/v1/models` listing
+- **Claude models** → Anthropic API with OAuth
+- **ChatGPT models** → ChatGPT Responses API with OAuth
+- **Custom models** → Direct passthrough to configured endpoint with API key
+- All models accessible through the same OpenAI-compatible interface
+- Requests are automatically routed based on model name
 
 ### Example: Z.AI Coding Plan
 
@@ -382,53 +473,8 @@ response = client.chat.completions.create(
 
 #### 2. Using Reasoning Model Variants
 
-```python
-response = client.chat.completions.create(
-    model="claude-sonnet-4-20250514-reasoning-high",  # Auto-enables thinking
-    messages=[{"role": "user", "content": "Solve this complex problem..."}]
-)
 ```
-
-Available reasoning model variants:
-- `{model-name}-reasoning-low` (8k thinking budget)
-- `{model-name}-reasoning-medium` (16k thinking budget)
-- `{model-name}-reasoning-high` (32k thinking budget)
-
-**Note:** If both `reasoning_effort` parameter and reasoning model variant are specified, the parameter takes precedence.
-
-## 1M Context Window Support
-
-The proxy supports 1-million token context window through model name variants. **Note:** 1M context requires **tier 4** subscription or custom rate limits.
-
-### Using 1M Context Model Variants
-
-Add `-1m` to any model name to enable 1M context:
-
-```python
-# Standard 200K context
-model="claude-sonnet-4-20250514"
-
-# 1M context (tier 4 required)
-model="claude-sonnet-4-20250514-1m"
-
-# 1M context + reasoning
-model="claude-sonnet-4-20250514-1m-reasoning-high"
 ```
-
-### How it Works
-
-When you use a `-1m` model variant:
-1. The proxy automatically adds the `context-1m-2025-08-07` beta header
-2. The `-1m` suffix is stripped before sending to Anthropic
-3. If you don't have tier 4 access, the request will fail with an error
-
-**Important:** Only use `-1m` variants if you have confirmed tier 4 access. Standard Pro/Max subscriptions do NOT have 1M context access.
-
-### Automatic max_tokens Adjustment
-
-When reasoning is enabled, the proxy automatically ensures `max_tokens` is sufficient:
-- Minimum required = thinking_budget + 1024 (for response)
-- If your `max_tokens` is too low, it will be automatically increased with a warning logged
 
 ## Usage Examples
 
@@ -442,7 +488,7 @@ client = openai.OpenAI(
     base_url="http://localhost:8081/v1"
 )
 
-# Basic chat completion (no reasoning)
+# ===== Claude Models =====
 response = client.chat.completions.create(
     model="claude-sonnet-4-20250514",
     messages=[
@@ -452,33 +498,52 @@ response = client.chat.completions.create(
     max_tokens=1000
 )
 
-print(response.choices[0].message.content)
-
-# With reasoning enabled via parameter
+# Claude with reasoning
 response = client.chat.completions.create(
     model="claude-sonnet-4-20250514",
     messages=[{"role": "user", "content": "Explain quantum entanglement"}],
-    reasoning_effort="high",  # Enables extended thinking
+    reasoning_effort="high",
     max_tokens=4000
 )
 
-# With reasoning enabled via model variant
+# ===== ChatGPT Models =====
 response = client.chat.completions.create(
-    model="claude-sonnet-4-20250514-reasoning-medium",
+    model="gpt-5",
+    messages=[{"role": "user", "content": "Write a Python function"}],
+    max_tokens=2000
+)
+
+# ChatGPT with reasoning variant
+response = client.chat.completions.create(
+    model="gpt-5-high",  # High reasoning effort
     messages=[{"role": "user", "content": "Solve this logic puzzle"}],
     max_tokens=4000
 )
 
-# Streaming
+# ChatGPT Codex for coding
+response = client.chat.completions.create(
+    model="gpt-5-codex",
+    messages=[{"role": "user", "content": "Refactor this code"}],
+    max_tokens=3000
+)
+
+# ===== Custom Models =====
+response = client.chat.completions.create(
+    model="glm-4.6",  # Z.AI model
+    messages=[{"role": "user", "content": "Hello!"}],
+    max_tokens=1000
+)
+
+# ===== Streaming (works with all providers) =====
 for chunk in client.chat.completions.create(
-    model="claude-sonnet-4-20250514",
+    model="gpt-5",  # or claude-sonnet-4-20250514, or glm-4.6
     messages=[{"role": "user", "content": "Tell me a story"}],
     stream=True
 ):
     if chunk.choices[0].delta.content:
         print(chunk.choices[0].delta.content, end="")
 
-# Function calling
+# ===== Function calling (works with all providers) =====
 response = client.chat.completions.create(
     model="claude-sonnet-4-20250514",
     messages=[{"role": "user", "content": "What's the weather?"}],
@@ -499,18 +564,27 @@ response = client.chat.completions.create(
 )
 ```
 
-### Using with cURL (OpenAI format)
+### Using with cURL
 
 ```bash
+# Claude model
 curl http://localhost:8081/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer dummy" \
   -d '{
     "model": "claude-sonnet-4-20250514",
-    "messages": [
-      {"role": "user", "content": "Hello!"}
-    ],
+    "messages": [{"role": "user", "content": "Hello!"}],
     "max_tokens": 1000
+  }'
+
+# ChatGPT model
+curl http://localhost:8081/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer dummy" \
+  -d '{
+    "model": "gpt-5",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "max_tokens": 2000
   }'
 ```
 
@@ -527,33 +601,30 @@ client = Anthropic(
 response = client.messages.create(
     model="claude-sonnet-4-20250514",
     max_tokens=1000,
-    messages=[
-        {"role": "user", "content": "Hello!"}
-    ]
+    messages=[{"role": "user", "content": "Hello!"}]
 )
 ```
 
-## Tested & Supported Features
+## Supported Features
 
-### Native Anthropic API
-- Browser use
-- Images
-- Extended thinking mode
-- All Anthropic-specific features
+### All Providers
+- ✅ Chat completions (streaming and non-streaming)
+- ✅ Tool/Function calling (including parallel tool calls)
+- ✅ Vision/Image inputs (URL and base64)
+- ✅ System messages
+- ✅ Standard parameters (temperature, top_p, max_tokens, stop sequences)
 
-### OpenAI API Compatibility
-- Chat completions (streaming and non-streaming)
-- Tool/Function calling
-- Vision (image inputs via URL or base64)
-- System messages
-- Standard parameters (temperature, top_p, max_tokens, stop)
-- Extended thinking/reasoning via `reasoning_effort` parameter
-- Model variants with pre-configured thinking budgets
-  - `claude-sonnet-4-20250514-reasoning-low` (8k tokens)
-  - `claude-sonnet-4-20250514-reasoning-medium` (16k tokens)
-  - `claude-sonnet-4-20250514-reasoning-high` (32k tokens)
+### Claude-Specific
+- ✅ Extended thinking mode via `reasoning_effort` parameter
+- ✅ 1M context window (tier 4 required, use `-1m` suffix)
+- ✅ Browser use
+- ✅ All Anthropic-specific features via native API
 
-These features provide compatibility with OpenAI's API format while leveraging Anthropic's extended thinking capabilities that are not available or not user friendly in Claude Code.
+### ChatGPT-Specific
+- ✅ Reasoning with effort levels (minimal/low/medium/high)
+- ✅ Reasoning summaries (auto/concise/detailed/none)
+- ✅ 400K context window, 128K max output
+- ✅ Model variants with pre-configured reasoning
 
 ## Configuration Priority
 
