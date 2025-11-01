@@ -119,10 +119,11 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest, raw_requ
                 logger.debug(f"[{request_id}] Initiating streaming request to ChatGPT")
 
                 tracer = maybe_create_stream_tracer(
+                    enabled=settings.STREAM_TRACE_ENABLED,
                     request_id=request_id,
-                    endpoint="openai-chat",
-                    model=request.model,
-                    stream_type="chatgpt"
+                    route="chatgpt",
+                    base_dir=settings.STREAM_TRACE_DIR,
+                    max_bytes=settings.STREAM_TRACE_MAX_BYTES,
                 )
 
                 async def chatgpt_stream_generator():
