@@ -10,9 +10,8 @@ from typing import Dict, Any, AsyncGenerator
 from unittest.mock import Mock, MagicMock
 
 import pytest
-import respx
 from fastapi.testclient import TestClient
-from httpx import AsyncClient, Response
+from httpx import AsyncClient
 
 # Import fixtures loader
 from tests.fixtures.loader import (
@@ -28,9 +27,9 @@ def temp_token_file():
     """Create a temporary token file for testing"""
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
         temp_path = f.name
-    
+
     yield temp_path
-    
+
     # Cleanup
     if os.path.exists(temp_path):
         os.unlink(temp_path)
@@ -42,9 +41,9 @@ def temp_models_config_file():
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
         json.dump(get_custom_models_config(), f)
         temp_path = f.name
-    
+
     yield temp_path
-    
+
     # Cleanup
     if os.path.exists(temp_path):
         os.unlink(temp_path)
@@ -54,7 +53,7 @@ def temp_models_config_file():
 def mock_token_storage(temp_token_file):
     """Create a mock TokenStorage instance"""
     from utils.storage import TokenStorage
-    
+
     storage = TokenStorage(token_file=temp_token_file)
     return storage
 
@@ -120,13 +119,6 @@ def custom_models_config():
 
 
 @pytest.fixture
-def mock_httpx_client():
-    """Create a mock httpx AsyncClient for testing"""
-    with respx.mock:
-        yield respx
-
-
-@pytest.fixture
 async def async_client():
     """Create an async httpx client for testing"""
     async with AsyncClient() as client:
@@ -137,7 +129,7 @@ async def async_client():
 def fastapi_test_client():
     """Create a FastAPI TestClient for integration tests"""
     from proxy.app import app
-    
+
     with TestClient(app) as client:
         yield client
 
@@ -146,12 +138,12 @@ def fastapi_test_client():
 def mock_oauth_manager(valid_oauth_token):
     """Create a mock OAuthManager with valid token"""
     from oauth import OAuthManager
-    
+
     manager = Mock(spec=OAuthManager)
     manager.get_valid_token_async = Mock(return_value=valid_oauth_token['access_token'])
     manager.get_valid_token = Mock(return_value=valid_oauth_token['access_token'])
     manager.is_authenticated = Mock(return_value=True)
-    
+
     return manager
 
 
@@ -159,16 +151,16 @@ def mock_oauth_manager(valid_oauth_token):
 def mock_config_with_custom_models(temp_models_config_file, monkeypatch):
     """Mock settings to use temporary models.json file"""
     import settings
-    
+
     # Patch the models.json path
     monkeypatch.setattr('models.custom_models.MODELS_JSON_PATH', temp_models_config_file)
-    
+
     # Force reload of custom models
     from models import custom_models
     custom_models._custom_models_cache = None  # Clear cache if it exists
-    
+
     yield
-    
+
     # Cleanup
     custom_models._custom_models_cache = None
 
@@ -182,10 +174,10 @@ def mock_env_vars(monkeypatch):
         'DEFAULT_MODEL': 'claude-sonnet-4-20250514',
         'STREAM_TRACE_ENABLED': 'false',
     }
-    
+
     for key, value in env_vars.items():
         monkeypatch.setenv(key, value)
-    
+
     return env_vars
 
 
@@ -208,56 +200,6 @@ def sample_sse_chunks():
         b'event: message_stop\n',
         b'data: {"type":"message_stop"}\n\n',
     ]
-
-
-@pytest.fixture
-def mock_anthropic_api(mock_httpx_client, mock_anthropic_text_response):
-    """Mock Anthropic API responses using respx"""
-    # Mock the messages endpoint
-    route = mock_httpx_client.post(
-        "https://api.anthropic.com/v1/messages"
-    ).mock(
-        return_value=Response(
-            200,
-            json=mock_anthropic_text_response
-        )
-    )
-    
-    return route
-
-
-@pytest.fixture
-def mock_custom_provider_api(mock_httpx_client):
-    """Mock custom provider API responses using respx"""
-    # Mock a generic OpenAI-compatible endpoint
-    route = mock_httpx_client.post(
-        url__regex=r"https://api\..*/v1/chat/completions"
-    ).mock(
-        return_value=Response(
-            200,
-            json={
-                "id": "chatcmpl-test123",
-                "object": "chat.completion",
-                "created": 1234567890,
-                "model": "test-model-1",
-                "choices": [{
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": "Test response from custom provider"
-                    },
-                    "finish_reason": "stop"
-                }],
-                "usage": {
-                    "prompt_tokens": 10,
-                    "completion_tokens": 20,
-                    "total_tokens": 30
-                }
-            }
-        )
-    )
-    
-    return route
 
 
 # Markers for convenience

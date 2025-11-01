@@ -13,7 +13,7 @@ class TestExchangeCode:
     """Test suite for standard token exchange"""
 
     @pytest.mark.asyncio
-    async def test_exchange_code_success(self, mocker):
+    async def test_exchange_code_success(self):
         """Test successful token exchange"""
         storage = TokenStorage()
         pkce = PKCEManager()
@@ -53,7 +53,7 @@ class TestExchangeCode:
             mock_clear.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_exchange_code_with_state(self, mocker):
+    async def test_exchange_code_with_state(self):
         """Test token exchange with code#state format"""
         storage = TokenStorage()
         pkce = PKCEManager()
@@ -86,7 +86,7 @@ class TestExchangeCode:
             assert json_data['state'] == "state_value"
 
     @pytest.mark.asyncio
-    async def test_exchange_code_loads_pkce_if_missing(self, mocker):
+    async def test_exchange_code_loads_pkce_if_missing(self):
         """Test that PKCE is loaded from storage if not in memory"""
         storage = TokenStorage()
         pkce = PKCEManager()

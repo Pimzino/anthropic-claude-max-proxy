@@ -49,18 +49,18 @@ class TestTokenStorage:
         with patch('utils.storage.TOKEN_FILE', temp_token_file):
             storage = TokenStorage()
 
-            # Save token that expires in 1 second
+            # Save token that expires in 10 seconds (well above 5-second buffer)
             storage.save_tokens(
                 access_token="test-token",
                 refresh_token="test-refresh",
-                expires_in=1
+                expires_in=10
             )
 
             # Should not be expired immediately
             assert storage.is_token_expired() is False
 
-            # Wait for expiration
-            time.sleep(2)
+            # Wait for expiration (need to wait > 10 seconds)
+            time.sleep(11)
 
             # Should now be expired
             assert storage.is_token_expired() is True
