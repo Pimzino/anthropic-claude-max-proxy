@@ -25,6 +25,7 @@ from chatgpt_oauth import (
     convert_tools_chat_to_responses,
 )
 from chatgpt_oauth.session import ensure_session_id
+from models import get_chatgpt_default_instructions
 
 if TYPE_CHECKING:
     from stream_debug import StreamTracer
@@ -68,6 +69,7 @@ class ChatGPTProvider(BaseProvider):
             "Content-Type": "application/json",
             "Accept": accept,
             "chatgpt-account-id": account_id,
+            "OpenAI-Beta": "responses=experimental",
             "session_id": session_id,
         }
 
@@ -99,6 +101,10 @@ class ChatGPTProvider(BaseProvider):
                 instructions = msg.get("content", "")
                 break
 
+        # If no system message provided, use default instructions for the model
+        if not instructions or not instructions.strip():
+            instructions = get_chatgpt_default_instructions(model)
+
         # Convert messages to Responses API format
         input_items = convert_chat_messages_to_responses_input(messages)
 
@@ -112,6 +118,11 @@ class ChatGPTProvider(BaseProvider):
 
         # Extract reasoning from model name if present (e.g., gpt-5-high)
         model_lower = model.lower()
+        # Strip openai- prefix if present
+        if model_lower.startswith("openai-"):
+            model_lower = model_lower[7:]
+            model = model[7:]  # Also strip from actual model name
+
         for effort in ["minimal", "low", "medium", "high"]:
             if model_lower.endswith(f"-{effort}"):
                 reasoning_effort = reasoning_effort or effort
@@ -128,9 +139,10 @@ class ChatGPTProvider(BaseProvider):
             }
 
         # Build Responses API payload
+        # Instructions should be None or a non-empty string (matching ChatMock's logic)
         payload = {
             "model": model,
-            "instructions": instructions,
+            "instructions": instructions if isinstance(instructions, str) and instructions.strip() else None,
             "input": input_items,
             "tools": responses_tools,
             "tool_choice": tool_choice if tool_choice in ("auto", "none") else "auto",

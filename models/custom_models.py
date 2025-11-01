@@ -10,6 +10,29 @@ import settings
 
 logger = logging.getLogger(__name__)
 
+# System prompts for ChatGPT models (from ChatMock/Codex CLI)
+# These are injected as instructions to ensure proper model behavior
+CHATGPT_BASE_INSTRUCTIONS = """You are a coding agent running in the Codex CLI, a terminal-based coding assistant. Codex CLI is an open source project led by OpenAI. You are expected to be precise, safe, and helpful.
+
+Your capabilities:
+- Receive user prompts and other context provided by the harness, such as files in the workspace.
+- Communicate with the user by streaming thinking & responses, and by making & updating plans.
+- Emit function calls to run terminal commands and apply patches.
+
+Your default personality and tone is concise, direct, and friendly. You communicate efficiently, always keeping the user clearly informed about ongoing actions without unnecessary detail."""
+
+CHATGPT_GPT5_CODEX_INSTRUCTIONS = """You are Codex, based on GPT-5. You are running as a coding agent in the Codex CLI on a user's computer.
+
+## General
+- When searching for text or files, prefer using `rg` or `rg --files` respectively because `rg` is much faster than alternatives like `grep`.
+
+## Editing constraints
+- Default to ASCII when editing or creating files. Only introduce non-ASCII or other Unicode characters when there is a clear justification and the file already uses them.
+- Add succinct code comments that explain what is going on if code is not self-explanatory.
+- You may be in a dirty git worktree. NEVER revert existing changes you did not make unless explicitly requested.
+
+Your default personality and tone is concise, direct, and friendly. You communicate efficiently, always keeping the user clearly informed about ongoing actions without unnecessary detail."""
+
 # Custom models configuration
 CUSTOM_MODELS_CONFIG: Dict[str, Dict[str, Any]] = {}
 
@@ -29,6 +52,7 @@ def _load_chatgpt_models() -> None:
             "max_completion_tokens": 128000,  # 128k max output tokens (official spec)
             "supports_reasoning": True,  # Supports reasoning with effort levels
             "supports_vision": True,  # Supports text and image input
+            "default_instructions": CHATGPT_BASE_INSTRUCTIONS,
         },
         {
             "id": "gpt-5-codex",
@@ -38,6 +62,7 @@ def _load_chatgpt_models() -> None:
             "max_completion_tokens": 128000,  # Same as gpt-5
             "supports_reasoning": True,  # Supports reasoning for coding tasks
             "supports_vision": True,  # Supports text and image input
+            "default_instructions": CHATGPT_GPT5_CODEX_INSTRUCTIONS,
         },
         {
             "id": "codex-mini-latest",
@@ -48,6 +73,7 @@ def _load_chatgpt_models() -> None:
             "max_completion_tokens": 16000,  # Conservative estimate for mini variant
             "supports_reasoning": False,  # Mini variant typically doesn't have reasoning
             "supports_vision": False,  # Mini variant typically text-only
+            "default_instructions": CHATGPT_BASE_INSTRUCTIONS,
         },
     ]
 
@@ -252,6 +278,34 @@ def get_chatgpt_model_config(model_id: str) -> Optional[Dict[str, Any]]:
         The model configuration dict, or None if not a ChatGPT model
     """
     return CHATGPT_MODELS_CONFIG.get(model_id.lower())
+
+
+def get_chatgpt_default_instructions(model_id: str) -> Optional[str]:
+    """Get the default system instructions for a ChatGPT model
+
+    Args:
+        model_id: The model identifier (e.g., "gpt-5", "gpt-5-codex", "openai-gpt-5-medium")
+
+    Returns:
+        The default instructions string, or None if not a ChatGPT model
+    """
+    # Strip openai- prefix if present
+    model_lower = model_id.lower()
+    if model_lower.startswith("openai-"):
+        model_lower = model_lower[7:]
+
+    # Strip reasoning effort suffix if present
+    for effort in ["minimal", "low", "medium", "high"]:
+        if model_lower.endswith(f"-{effort}"):
+            model_lower = model_lower[:-len(f"-{effort}")]
+            break
+
+    # Get the base model config
+    config = CHATGPT_MODELS_CONFIG.get(model_lower)
+    if config:
+        return config.get("default_instructions")
+
+    return None
 
 
 # Load ChatGPT models first
