@@ -34,6 +34,7 @@ def _load_custom_models() -> None:
             max_completion_tokens=model_config.get("max_completion_tokens", 4096),
             reasoning_level=None,
             reasoning_budget=None,
+            supports_vision=model_config.get("vision", model_config.get("supports_vision", False)),
             use_1m_context=False,
             include_in_listing=True,
         )

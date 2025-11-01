@@ -34,6 +34,7 @@ def _build_registry() -> None:
             owned_by=base.owned_by,
             context_length=base.context_length,
             max_completion_tokens=base.max_completion_tokens,
+            supports_vision=base.supports_vision,
             use_1m_context=base.use_1m_context,
         )
         _register_model(base_entry)
@@ -50,6 +51,7 @@ def _build_registry() -> None:
                     max_completion_tokens=base.max_completion_tokens,
                     reasoning_level=level,
                     reasoning_budget=budget,
+                    supports_vision=base.supports_vision,
                     use_1m_context=base.use_1m_context,
                 )
                 _register_model(reasoning_entry)
@@ -63,6 +65,7 @@ def _build_registry() -> None:
                 owned_by=base.owned_by,
                 context_length=base.context_length,
                 max_completion_tokens=base.max_completion_tokens,
+                supports_vision=base.supports_vision,
                 include_in_listing=False,
                 use_1m_context=base.use_1m_context,
             )
@@ -81,6 +84,7 @@ def _build_registry() -> None:
                         max_completion_tokens=base.max_completion_tokens,
                         reasoning_level=level,
                         reasoning_budget=budget,
+                        supports_vision=base.supports_vision,
                         include_in_listing=False,
                         use_1m_context=base.use_1m_context,
                     )

@@ -17,6 +17,7 @@ class BaseModelSpec:
     context_length: int
     max_completion_tokens: int
     supports_reasoning: bool = True
+    supports_vision: bool = True
     use_1m_context: bool = False
 
 
@@ -30,6 +31,7 @@ class ModelRegistryEntry:
     max_completion_tokens: int
     reasoning_level: Optional[str] = None
     reasoning_budget: Optional[int] = None
+    supports_vision: bool = True
     use_1m_context: bool = False
     include_in_listing: bool = True
 
@@ -45,6 +47,8 @@ class ModelRegistryEntry:
         if self.reasoning_level:
             data["reasoning_capable"] = True
             data["reasoning_budget"] = self.reasoning_budget or REASONING_BUDGET_MAP.get(self.reasoning_level)
+        if self.supports_vision:
+            data["supports_vision"] = True
         return data
 
 
