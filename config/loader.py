@@ -91,13 +91,23 @@ def load_custom_models(models_path: Optional[str] = None) -> List[Dict[str, Any]
 
     Args:
         models_path: Optional path to models.json file.
-                    Defaults to 'models.json' in the current directory.
+                    Defaults to 'models.json' in the project root directory.
 
     Returns:
         List of custom model configurations. Returns empty list if file doesn't exist
         or if there's an error loading it.
     """
-    path = Path(models_path) if models_path else Path("models.json")
+    if models_path:
+        path = Path(models_path)
+    else:
+        # Use absolute path relative to project root
+        # __file__ is config/loader.py, so parent.parent is the project root
+        config_dir = Path(__file__).parent  # config/ directory
+        project_root = config_dir.parent    # project root
+        path = project_root / "models.json"
+
+    # Resolve to absolute path for consistent logging
+    path = path.resolve()
 
     if not path.exists():
         logger.debug(f"Custom models file not found: {path}")
@@ -136,7 +146,11 @@ def load_custom_models(models_path: Optional[str] = None) -> List[Dict[str, Any]
 
             validated_models.append(model)
 
-        logger.info(f"Loaded {len(validated_models)} custom model(s) from {path}")
+        if validated_models:
+            model_ids = [m['id'] for m in validated_models]
+            logger.info(f"Loaded {len(validated_models)} custom model(s) from {path}: {model_ids}")
+        else:
+            logger.warning(f"No valid custom models found in {path}")
         return validated_models
 
     except json.JSONDecodeError as e:
