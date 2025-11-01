@@ -63,3 +63,61 @@ The ChatGPT Responses API is designed to work with the Codex CLI, which sends co
 - Sandbox and approval workflows
 
 These detailed instructions are critical for the model to function correctly as a coding agent, not just a simple chatbot.
+
+---
+
+## Second Issue: Reasoning Parameter Format
+
+### Problem
+
+After fixing the instructions, we encountered another 400 error:
+
+```json
+{
+  "error": {
+    "message": "Unknown parameter: 'reasoning.type'.",
+    "type": "invalid_request_error",
+    "param": "reasoning.type",
+    "code": "unknown_parameter"
+  }
+}
+```
+
+### Root Cause
+
+We were sending the reasoning parameter in the wrong format:
+
+**Our format (WRONG):**
+```json
+{
+  "type": "enabled",
+  "effort": "medium",
+  "summary": "auto"
+}
+```
+
+**ChatMock format (CORRECT):**
+```json
+{
+  "effort": "medium",
+  "summary": "auto"
+}
+```
+
+The ChatGPT API doesn't recognize the `"type": "enabled"` field.
+
+### Solution
+
+Updated `providers/chatgpt_provider.py` to match ChatMock's reasoning parameter format:
+- Removed the `"type": "enabled"` field
+- Only include `"effort"` (required) and `"summary"` (optional, omit if "none")
+- Added validation for effort values: `["minimal", "low", "medium", "high"]`
+- Added validation for summary values: `["auto", "concise", "detailed", "none"]`
+
+### Files Changed
+
+- `providers/chatgpt_provider.py` - Fixed reasoning parameter format in `_build_responses_payload()`
+
+### Testing
+
+The reasoning parameter should now be sent in the correct format that the ChatGPT API expects.

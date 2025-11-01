@@ -123,13 +123,24 @@ class ChatGPTProvider(BaseProvider):
                 model = model[:-len(f"-{effort}")]
                 break
 
-        # Build reasoning parameter if needed
+        # Build reasoning parameter if needed (matching ChatMock format)
+        # ChatMock format: {"effort": "medium", "summary": "auto"}
+        # NOT: {"type": "enabled", "effort": "medium", "summary": "auto"}
         if reasoning_effort or reasoning_summary:
-            reasoning_param = {
-                "type": "enabled",
-                "effort": reasoning_effort or CHATGPT_DEFAULT_REASONING_EFFORT,
-                "summary": reasoning_summary or CHATGPT_DEFAULT_REASONING_SUMMARY,
-            }
+            effort = reasoning_effort or CHATGPT_DEFAULT_REASONING_EFFORT
+            summary = reasoning_summary or CHATGPT_DEFAULT_REASONING_SUMMARY
+
+            # Validate effort
+            if effort not in ["minimal", "low", "medium", "high"]:
+                effort = "medium"
+
+            # Validate summary
+            if summary not in ["auto", "concise", "detailed", "none"]:
+                summary = "auto"
+
+            reasoning_param = {"effort": effort}
+            if summary != "none":
+                reasoning_param["summary"] = summary
 
         # Build Responses API payload
         # Instructions should be None or a non-empty string (matching ChatMock's logic)
