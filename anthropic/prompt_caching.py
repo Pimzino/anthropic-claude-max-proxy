@@ -17,6 +17,14 @@ def count_existing_cache_controls(request_data: Dict[str, Any]) -> int:
     """
     count = 0
 
+    # Count in tools (first in cache hierarchy)
+    if 'tools' in request_data:
+        tools = request_data['tools']
+        if isinstance(tools, list):
+            for tool in tools:
+                if isinstance(tool, dict) and 'cache_control' in tool:
+                    count += 1
+
     # Count in system message
     if 'system' in request_data:
         system = request_data['system']
@@ -41,10 +49,12 @@ def add_prompt_caching(request_data: Dict[str, Any]) -> Dict[str, Any]:
     """Add prompt caching breakpoints following Anthropic's best practices
 
     Strategy:
+    - Add cache_control to tools (if present) - mark the last tool
     - Add cache_control to system message (if present)
     - Add cache_control to the last 2 user messages to cache recent conversation
     - Only mark the last content block in each cached message
     - Respect Anthropic's limit of 4 cache_control blocks maximum
+    - Follow cache hierarchy: tools → system → messages
 
     Anthropic prompt caching docs: https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
 
@@ -67,6 +77,19 @@ def add_prompt_caching(request_data: Dict[str, Any]) -> Dict[str, Any]:
 
     remaining_slots = MAX_CACHE_BLOCKS - existing_count
     logger.debug(f"Found {existing_count} existing cache_control blocks, {remaining_slots} slots available")
+
+    # Add cache_control to tools (first in cache hierarchy)
+    # Only mark the last tool - Anthropic automatically caches all tools before it
+    if 'tools' in modified_request and remaining_slots > 0:
+        tools = modified_request['tools']
+        if isinstance(tools, list) and len(tools) > 0:
+            # Mark the last tool for caching
+            last_tool = tools[-1]
+            if isinstance(last_tool, dict) and 'cache_control' not in last_tool:
+                last_tool['cache_control'] = {'type': 'ephemeral'}
+                cache_added_count += 1
+                remaining_slots -= 1
+                logger.debug(f"Added cache_control to tools (last tool: {last_tool.get('name', 'unknown')})")
 
     # Add cache_control to system message if present and we have room
     if 'system' in modified_request and remaining_slots > 0:
