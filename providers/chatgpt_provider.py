@@ -142,7 +142,6 @@ class ChatGPTProvider(BaseProvider):
         # Instructions should be None or a non-empty string (matching ChatMock's logic)
         payload = {
             "model": model,
-            "instructions": instructions if isinstance(instructions, str) and instructions.strip() else None,
             "input": input_items,
             "tools": responses_tools,
             "tool_choice": tool_choice if tool_choice in ("auto", "none") else "auto",
@@ -151,6 +150,10 @@ class ChatGPTProvider(BaseProvider):
             "stream": True,
             "prompt_cache_key": session_id,
         }
+
+        # Only include instructions if we have a non-empty string
+        if isinstance(instructions, str) and instructions.strip():
+            payload["instructions"] = instructions
 
         if reasoning_param:
             payload["reasoning"] = reasoning_param
