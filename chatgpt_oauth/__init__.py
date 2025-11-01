@@ -6,7 +6,8 @@ enabling access to GPT-5, GPT-5-Codex, and Codex-Mini models.
 
 from .models import TokenData, AuthBundle, PkceCodes
 from .authorization import AuthorizationURLBuilder
-from .token_exchange import exchange_code_for_tokens
+from .pkce import PKCEManager
+from .token_exchange import exchange_code_for_tokens, exchange_code_for_tokens_sync
 from .token_manager import ChatGPTOAuthManager
 from .token_refresh import refresh_chatgpt_tokens
 from .storage import ChatGPTTokenStorage
@@ -22,7 +23,9 @@ __all__ = [
     "AuthBundle",
     "PkceCodes",
     "AuthorizationURLBuilder",
+    "PKCEManager",
     "exchange_code_for_tokens",
+    "exchange_code_for_tokens_sync",
     "ChatGPTOAuthManager",
     "refresh_chatgpt_tokens",
     "ChatGPTTokenStorage",
