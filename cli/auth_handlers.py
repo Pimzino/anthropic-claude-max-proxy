@@ -242,7 +242,7 @@ def setup_long_term_token(
             console.print(f"[cyan]{access_token}[/cyan]\n")
 
             console.print("[bold]Token Details:[/bold]")
-            console.print(f"• Type: Long-term (1 year)")
+            console.print("• Type: Long-term (1 year)")
             console.print(f"• Expires: {status.get('expires_at', 'unknown')}")
             console.print(f"• Time remaining: {status.get('time_until_expiry', 'unknown')}")
             console.print(f"• Saved to: {storage.token_file}\n")
