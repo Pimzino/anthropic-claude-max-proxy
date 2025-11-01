@@ -94,16 +94,9 @@ class ChatGPTProvider(BaseProvider):
         tool_choice = request_data.get("tool_choice", "auto")
         parallel_tool_calls = request_data.get("parallel_tool_calls", False)
 
-        # Extract system message as instructions
-        instructions = None
-        for msg in messages:
-            if msg.get("role") == "system":
-                instructions = msg.get("content", "")
-                break
-
-        # If no system message provided, use default instructions for the model
-        if not instructions or not instructions.strip():
-            instructions = get_chatgpt_default_instructions(model)
+        # Always use default instructions for the model (matching ChatMock behavior)
+        # User system messages are handled by convert_chat_messages_to_responses_input
+        instructions = get_chatgpt_default_instructions(model)
 
         # Convert messages to Responses API format
         input_items = convert_chat_messages_to_responses_input(messages)
