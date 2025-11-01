@@ -294,7 +294,8 @@ Configure your OpenAI API client:
 - **API Key:** Any non-empty string (e.g., "dummy")
 - **Models:**
   - Claude: `claude-sonnet-4-20250514`, `claude-opus-4-20250514`, etc.
-  - ChatGPT: `gpt-5`, `gpt-5-codex`, `codex-mini-latest`, etc.
+  - ChatGPT: `openai-gpt-5`, `openai-gpt-5-codex`, `openai-codex-mini-latest`, etc.
+    - Aliases (also accepted): `gpt-5`, `gpt-5-codex`, `codex-mini-latest`
   - Custom: Your configured model IDs
 - **Endpoint:** `/v1/chat/completions`
 
@@ -354,10 +355,11 @@ All Claude models available with your Pro/Max subscription:
 
 ### ChatGPT Models
 All GPT models available with your Plus/Pro subscription:
-- `gpt-5` (400K context, 128K output)
-- `gpt-5-codex` (optimized for coding)
-- `codex-mini-latest` (faster, smaller variant)
+- `openai-gpt-5` (400K context, 128K output)
+- `openai-gpt-5-codex` (optimized for coding)
+- `openai-codex-mini-latest` (faster, smaller variant)
 - Plus reasoning variants: `-minimal`, `-low`, `-medium`, `-high`
+- Aliases: `gpt-5`, `gpt-5-codex`, `codex-mini-latest` (also accepted)
 
 ### Custom Models
 Any OpenAI-compatible models configured in `models.json`
@@ -507,6 +509,7 @@ response = client.chat.completions.create(
 )
 
 # ===== ChatGPT Models =====
+# Note: Examples use aliases (gpt-5) for brevity, but openai-gpt-5 is the advertised model ID
 response = client.chat.completions.create(
     model="gpt-5",
     messages=[{"role": "user", "content": "Write a Python function"}],

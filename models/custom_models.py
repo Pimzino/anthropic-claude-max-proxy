@@ -85,7 +85,7 @@ def _load_chatgpt_models() -> None:
     # Source: https://platform.openai.com/docs/models/gpt-5
     base_models = [
         {
-            "id": "gpt-5",
+            "id": "openai-gpt-5",
             "owned_by": "openai-chatgpt",
             "context_length": 400000,  # 400k context window (official spec)
             "max_completion_tokens": 128000,  # 128k max output tokens (official spec)
@@ -94,7 +94,7 @@ def _load_chatgpt_models() -> None:
             "default_instructions": CHATGPT_BASE_INSTRUCTIONS,
         },
         {
-            "id": "gpt-5-codex",
+            "id": "openai-gpt-5-codex",
             "owned_by": "openai-chatgpt",
             # Note: gpt-5-codex uses same base as gpt-5 with coding optimizations
             "context_length": 400000,  # Same as gpt-5
@@ -104,7 +104,7 @@ def _load_chatgpt_models() -> None:
             "default_instructions": CHATGPT_GPT5_CODEX_INSTRUCTIONS,
         },
         {
-            "id": "codex-mini-latest",
+            "id": "openai-codex-mini-latest",
             "owned_by": "openai-chatgpt",
             # Note: codex-mini is a smaller, faster variant
             # Exact specs not publicly documented, using conservative estimates
@@ -135,10 +135,13 @@ def _load_chatgpt_models() -> None:
     for model_config in base_models:
         model_id = model_config["id"]
 
-        # Store config for later use
+        # Store config for later use (with and without openai- prefix)
         CHATGPT_MODELS_CONFIG[model_id.lower()] = model_config
+        # Also store without prefix for lookup
+        unprefixed_id = model_id[7:] if model_id.startswith("openai-") else model_id
+        CHATGPT_MODELS_CONFIG[unprefixed_id.lower()] = model_config
 
-        # Create registry entry
+        # Create registry entry (advertised with openai- prefix)
         entry = ModelRegistryEntry(
             openai_id=model_id,
             anthropic_id="",  # Not an Anthropic model
@@ -156,9 +159,9 @@ def _load_chatgpt_models() -> None:
         _register_model(entry)
         logger.debug(f"Registered ChatGPT model: {model_id}")
 
-        # Add openai- prefixed alias (not listed)
+        # Add unprefixed alias (not listed) - this is the actual OpenAI model ID
         alias_entry = ModelRegistryEntry(
-            openai_id=f"openai-{model_id}",
+            openai_id=unprefixed_id,
             anthropic_id="",
             created=0,
             owned_by=model_config["owned_by"],
@@ -171,14 +174,15 @@ def _load_chatgpt_models() -> None:
             include_in_listing=False,  # Hidden alias
         )
         _register_model(alias_entry)
-        logger.debug(f"Registered ChatGPT alias: openai-{model_id}")
+        logger.debug(f"Registered ChatGPT alias: {unprefixed_id}")
 
     # Register reasoning effort variants if enabled
     if settings.CHATGPT_EXPOSE_REASONING_VARIANTS:
         reasoning_efforts = ["minimal", "low", "medium", "high"]
-        reasoning_models = ["gpt-5", "gpt-5-codex"]
+        reasoning_models = ["openai-gpt-5", "openai-gpt-5-codex"]
 
         for base_model in reasoning_models:
+            # Look up config using the openai- prefixed ID
             base_config = CHATGPT_MODELS_CONFIG.get(base_model.lower())
             if not base_config or not base_config.get("supports_reasoning"):
                 continue
@@ -189,7 +193,11 @@ def _load_chatgpt_models() -> None:
                 variant_config["id"] = variant_id
                 variant_config["reasoning_effort"] = effort
 
+                # Store with openai- prefix
                 CHATGPT_MODELS_CONFIG[variant_id.lower()] = variant_config
+                # Also store unprefixed version for lookup
+                unprefixed_variant_id = variant_id[7:] if variant_id.startswith("openai-") else variant_id
+                CHATGPT_MODELS_CONFIG[unprefixed_variant_id.lower()] = variant_config
 
                 entry = ModelRegistryEntry(
                     openai_id=variant_id,
@@ -208,9 +216,9 @@ def _load_chatgpt_models() -> None:
                 _register_model(entry)
                 logger.debug(f"Registered ChatGPT reasoning variant: {variant_id}")
 
-                # Add openai- prefixed alias for reasoning variant
+                # Add unprefixed alias for reasoning variant (hidden)
                 alias_variant_entry = ModelRegistryEntry(
-                    openai_id=f"openai-{variant_id}",
+                    openai_id=unprefixed_variant_id,
                     anthropic_id="",
                     created=0,
                     owned_by=base_config["owned_by"],
@@ -223,7 +231,7 @@ def _load_chatgpt_models() -> None:
                     include_in_listing=False,  # Hidden alias
                 )
                 _register_model(alias_variant_entry)
-                logger.debug(f"Registered ChatGPT reasoning alias: openai-{variant_id}")
+                logger.debug(f"Registered ChatGPT reasoning alias: {unprefixed_variant_id}")
 
 
 def _load_custom_models() -> None:
@@ -271,8 +279,8 @@ def is_custom_model(model_id: str) -> bool:
 def is_chatgpt_model(model_id: str) -> bool:
     """Check if a model ID is a ChatGPT model
 
-    Supports both official IDs (gpt-5, gpt-5-medium) and
-    openai- prefixed aliases (openai-gpt-5, openai-gpt-5-medium)
+    Supports both advertised IDs (openai-gpt-5, openai-gpt-5-medium) and
+    unprefixed aliases (gpt-5, gpt-5-medium)
 
     Args:
         model_id: The model identifier

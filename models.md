@@ -38,9 +38,9 @@ Each base model has three reasoning variants with different thinking budgets:
 
 | Model ID | Context Length | Max Completion Tokens | Vision Support | Reasoning Support |
 |----------|----------------|----------------------|----------------|-------------------|
-| `gpt-5` | 400,000 | 128,000 | ✓ | ✓ |
-| `gpt-5-codex` | 400,000 | 128,000 | ✓ | ✓ |
-| `codex-mini-latest` | 128,000 | 16,000 | ✗ | ✗ |
+| `openai-gpt-5` | 400,000 | 128,000 | ✓ | ✓ |
+| `openai-gpt-5-codex` | 400,000 | 128,000 | ✓ | ✓ |
+| `openai-codex-mini-latest` | 128,000 | 16,000 | ✗ | ✗ |
 
 ### Reasoning Variants (if enabled)
 
@@ -48,14 +48,14 @@ When `CHATGPT_EXPOSE_REASONING_VARIANTS` is enabled, the following variants are 
 
 | Model ID | Reasoning Effort |
 |----------|-----------------|
-| `gpt-5-minimal` | Minimal |
-| `gpt-5-low` | Low |
-| `gpt-5-medium` | Medium |
-| `gpt-5-high` | High |
-| `gpt-5-codex-minimal` | Minimal |
-| `gpt-5-codex-low` | Low |
-| `gpt-5-codex-medium` | Medium |
-| `gpt-5-codex-high` | High |
+| `openai-gpt-5-minimal` | Minimal |
+| `openai-gpt-5-low` | Low |
+| `openai-gpt-5-medium` | Medium |
+| `openai-gpt-5-high` | High |
+| `openai-gpt-5-codex-minimal` | Minimal |
+| `openai-gpt-5-codex-low` | Low |
+| `openai-gpt-5-codex-medium` | Medium |
+| `openai-gpt-5-codex-high` | High |
 
 ## Custom Models
 
@@ -75,6 +75,16 @@ Each Anthropic native ID also supports reasoning variants:
 - `{anthropic-id}-reasoning-medium`
 - `{anthropic-id}-reasoning-high`
 
+The following OpenAI native IDs are also accepted (but not listed in `/v1/models`):
+
+- `gpt-5`
+- `gpt-5-codex`
+- `codex-mini-latest`
+
+Each OpenAI native ID also supports reasoning variants (when enabled):
+- `gpt-5-minimal`, `gpt-5-low`, `gpt-5-medium`, `gpt-5-high`
+- `gpt-5-codex-minimal`, `gpt-5-codex-low`, `gpt-5-codex-medium`, `gpt-5-codex-high`
+
 ## Total Model Count
 
 - **Claude Base Models**: 4
@@ -91,4 +101,4 @@ Each Anthropic native ID also supports reasoning variants:
 2. Reasoning variants use extended thinking to improve response quality
 3. ChatGPT reasoning variants use OpenAI's effort-based reasoning system
 4. Custom models can override default specifications via `models.json`
-5. Model aliases (Anthropic native IDs) are accepted but not shown in listings
+5. Model aliases (Anthropic native IDs and OpenAI native IDs) are accepted but not shown in listings
