@@ -1,20 +1,76 @@
-"""Custom model configuration and management"""
-
-from typing import Dict, Optional, Any, List
+"""Custom models configuration and registration"""
 import logging
-
-from config.loader import load_custom_models
-from .registry import _register_model, OPENAI_MODELS_LIST
-from .specifications import ModelRegistryEntry
+from pathlib import Path
+from typing import Dict, Any, Optional, List
 import settings
+
+from models.registry import ModelRegistryEntry, _register_model, OPENAI_MODELS_LIST
+from config.loader import load_custom_models
 
 logger = logging.getLogger(__name__)
 
 # System prompts for ChatGPT models (from ChatMock/Codex CLI)
 # These are injected as instructions to ensure proper model behavior
-CHATGPT_BASE_INSTRUCTIONS = """You are a helpful coding assistant. You are precise, safe, and helpful. Your default personality and tone is concise, direct, and friendly."""
 
-CHATGPT_GPT5_CODEX_INSTRUCTIONS = """You are Codex, a coding assistant based on GPT-5. You are precise, safe, and helpful. Your default personality and tone is concise, direct, and friendly. When editing files, add succinct code comments only when code is not self-explanatory."""
+def _read_prompt_file(filename: str) -> Optional[str]:
+    """Read a prompt file from the prompts directory
+
+    Args:
+        filename: Name of the prompt file to read
+
+    Returns:
+        The file contents as a string, or None if not found
+    """
+    candidates = [
+        Path(__file__).parent.parent / "prompts" / filename,
+        Path(__file__).parent / "prompts" / filename,
+        Path.cwd() / "prompts" / filename,
+    ]
+
+    for candidate in candidates:
+        try:
+            if candidate.exists():
+                content = candidate.read_text(encoding="utf-8")
+                if isinstance(content, str) and content.strip():
+                    return content
+        except Exception as e:
+            logger.debug(f"Failed to read {candidate}: {e}")
+            continue
+
+    return None
+
+
+def _load_base_instructions() -> str:
+    """Load base GPT-5 instructions from markdown file
+
+    Returns:
+        The base instructions string
+
+    Raises:
+        FileNotFoundError: If the prompt file cannot be found
+    """
+    content = _read_prompt_file("gpt5_base.md")
+    if content is None:
+        raise FileNotFoundError("Failed to read prompts/gpt5_base.md; expected in prompts/ directory")
+    return content
+
+
+def _load_gpt5_codex_instructions(fallback: str) -> str:
+    """Load GPT-5 Codex instructions from markdown file
+
+    Args:
+        fallback: Fallback instructions if file not found
+
+    Returns:
+        The Codex instructions string, or fallback if not found
+    """
+    content = _read_prompt_file("gpt5_codex.md")
+    return content if isinstance(content, str) and content.strip() else fallback
+
+
+# Load instructions from markdown files (matching ChatMock behavior)
+CHATGPT_BASE_INSTRUCTIONS = _load_base_instructions()
+CHATGPT_GPT5_CODEX_INSTRUCTIONS = _load_gpt5_codex_instructions(CHATGPT_BASE_INSTRUCTIONS)
 
 # Custom models configuration
 CUSTOM_MODELS_CONFIG: Dict[str, Dict[str, Any]] = {}
