@@ -173,7 +173,7 @@ class ChatGPTProvider(BaseProvider):
             The HTTP response from ChatGPT
         """
         # Get valid OAuth credentials
-        access_token, account_id = self.oauth_manager.get_auth_credentials()
+        access_token, account_id = await self.oauth_manager.get_auth_credentials_async()
         if not access_token or not account_id:
             raise ValueError("No valid ChatGPT OAuth credentials available")
 
@@ -226,7 +226,7 @@ class ChatGPTProvider(BaseProvider):
             SSE chunks in OpenAI format
         """
         # Get valid OAuth credentials
-        access_token, account_id = self.oauth_manager.get_auth_credentials()
+        access_token, account_id = await self.oauth_manager.get_auth_credentials_async()
         if not access_token or not account_id:
             error_event = 'data: {"error": {"message": "No valid ChatGPT OAuth credentials available"}}\n\n'
             if tracer:

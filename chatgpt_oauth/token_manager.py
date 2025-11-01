@@ -166,3 +166,13 @@ class ChatGPTOAuthManager:
         token = self.get_valid_token()
         account_id = self.storage.get_account_id()
         return token, account_id
+
+    async def get_auth_credentials_async(self) -> tuple[Optional[str], Optional[str]]:
+        """Get authentication credentials for API requests (async version)
+
+        Returns:
+            Tuple of (access_token, account_id)
+        """
+        token = await self.get_valid_token_async()
+        account_id = self.storage.get_account_id()
+        return token, account_id
