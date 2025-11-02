@@ -55,7 +55,8 @@ THINKING_DEFAULT_BUDGET = config.get("THINKING_DEFAULT_BUDGET", 16000)
 # Pure Anthropic proxy - native endpoint always enabled
 
 # Token storage
-TOKEN_FILE = config.get("TOKEN_FILE", str(Path.home() / ".anthropic-claude-max-proxy" / "tokens.json"))
+# New default LLMux token locations
+TOKEN_FILE = config.get("TOKEN_FILE", str(Path.home() / ".llmux" / "tokens.json"))
 
 # Headless mode configuration
 # Long-term OAuth token from environment (e.g., from claude setup-token)
@@ -66,7 +67,8 @@ ANTHROPIC_OAUTH_TOKEN = os.getenv("ANTHROPIC_OAUTH_TOKEN", None)
 CHATGPT_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 CHATGPT_OAUTH_ISSUER = "https://auth.openai.com"
 CHATGPT_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
-CHATGPT_TOKEN_FILE = str(Path.home() / ".chatgpt-local" / "tokens.json")
+# New default LLMux location for ChatGPT tokens
+CHATGPT_TOKEN_FILE = str(Path.home() / ".llmux" / "chatgpt" / "tokens.json")
 
 # ChatGPT model defaults
 CHATGPT_DEFAULT_REASONING_EFFORT = config.get("CHATGPT_DEFAULT_REASONING_EFFORT", "medium")

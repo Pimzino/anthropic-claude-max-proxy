@@ -1,6 +1,6 @@
-# LLM Subscription Proxy
+# LLMux
 
-OpenAI-compatible proxy for Claude Pro/Max and ChatGPT Plus/Pro subscriptions using OAuth.
+OpenAI-compatible proxy for Claude Pro/Max, ChatGPT Plus/Pro, and custom OpenAI-compatible providers using OAuth.
 
 ## Overview
 
@@ -75,7 +75,7 @@ This proxy uses the ChatGPT Codex OAuth flow:
 **Authentication:**
 - Uses OAuth Bearer tokens with `authorization: Bearer <token>` header
 - Includes `chatgpt-account-id` header for account identification
-- Tokens stored separately in `~/.chatgpt-local/tokens.json`
+- Tokens stored at `~/.llmux/chatgpt/tokens.json` (auto-migrates from `~/.chatgpt-local/tokens.json`)
 
 **Features:**
 - Session-based prompt caching for efficiency
@@ -253,7 +253,7 @@ Or use docker-compose:
 ```yaml
 version: '3.8'
 services:
-  claude-proxy:
+  llmux:
     build: .
     ports:
       - "8081:8081"

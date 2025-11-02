@@ -10,6 +10,9 @@ from settings import TOKEN_FILE
 class TokenStorage:
     """Secure token storage with file permissions (plan.md sections 3.6 and 10)"""
 
+    OLD_TOKEN_DIR = Path.home() / ".anthropic-claude-max-proxy"
+    OLD_TOKEN_PATH = OLD_TOKEN_DIR / "tokens.json"
+
     def __init__(self, token_file: Optional[str] = None):
         self.token_path = Path(token_file if token_file else TOKEN_FILE)
         self._ensure_secure_directory()
@@ -22,6 +25,21 @@ class TokenStorage:
             # Set directory permissions to 700 on Unix-like systems
             if platform.system() != "Windows":
                 os.chmod(parent_dir, 0o700)
+
+    def _migrate_from_old_path_if_present(self) -> Optional[Dict[str, Any]]:
+        """If old token exists and new one doesn't, migrate content to new path."""
+        try:
+            if not self.token_path.exists() and self.OLD_TOKEN_PATH.exists():
+                data = json.loads(self.OLD_TOKEN_PATH.read_text())
+                # Write to new path
+                self._ensure_secure_directory()
+                self.token_path.write_text(json.dumps(data, indent=2))
+                if platform.system() != "Windows":
+                    os.chmod(self.token_path, 0o600)
+                return data
+        except Exception:
+            pass
+        return None
 
     def save_tokens(self, access_token: str, refresh_token: str, expires_in: int):
         """Save tokens with computed expiry time (plan.md section 3.4)"""
@@ -68,6 +86,10 @@ class TokenStorage:
     def load_tokens(self) -> Optional[Dict[str, Any]]:
         """Load tokens from storage"""
         if not self.token_path.exists():
+            # Attempt migration from old path
+            migrated = self._migrate_from_old_path_if_present()
+            if migrated is not None:
+                return migrated
             return None
 
         try:

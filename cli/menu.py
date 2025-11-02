@@ -11,7 +11,7 @@ def clear_screen(console):
 def display_header(console):
     """Display the application header"""
     console.print("=" * 50)
-    console.print("    LLM Subscription Proxy", style="bold")
+    console.print("    LLMux", style="bold")
     console.print("=" * 50)
 
 

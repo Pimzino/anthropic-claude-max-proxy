@@ -14,7 +14,7 @@ console = Console()
 
 def main():
     """Entry point for the CLI"""
-    parser = argparse.ArgumentParser(description="Anthropic Claude Max Proxy CLI")
+    parser = argparse.ArgumentParser(description="LLMux CLI")
     parser.add_argument("--debug", "-d", action="store_true", help="Enable debug logging")
     parser.add_argument("--debug-sse", action="store_true", help="Enable detailed SSE event logging")
     parser.add_argument("--bind", "-b", default=None, help="Override bind address (default: from config)")

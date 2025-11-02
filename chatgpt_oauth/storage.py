@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import settings
 
 logger = logging.getLogger(__name__)
 
@@ -13,14 +14,16 @@ logger = logging.getLogger(__name__)
 class ChatGPTTokenStorage:
     """Manages persistent storage of ChatGPT OAuth tokens"""
 
+    OLD_TOKEN_FILE = Path.home() / ".chatgpt-local" / "tokens.json"
+
     def __init__(self, token_file: Optional[Path] = None):
         """Initialize token storage
 
         Args:
-            token_file: Path to token file (default: ~/.chatgpt-local/tokens.json)
+            token_file: Path to token file (default: ~/.llmux/chatgpt/tokens.json)
         """
         if token_file is None:
-            token_file = Path.home() / ".chatgpt-local" / "tokens.json"
+            token_file = Path(settings.CHATGPT_TOKEN_FILE)
 
         self.token_file = Path(token_file)
         self._ensure_directory()
@@ -28,6 +31,23 @@ class ChatGPTTokenStorage:
     def _ensure_directory(self) -> None:
         """Ensure storage directory exists"""
         self.token_file.parent.mkdir(parents=True, exist_ok=True)
+
+    def _maybe_migrate_from_old(self) -> Optional[Dict[str, Any]]:
+        """If old ChatGPT token file exists and new doesn't, migrate it."""
+        try:
+            if not self.token_file.exists() and self.OLD_TOKEN_FILE.exists():
+                data = json.loads(self.OLD_TOKEN_FILE.read_text())
+                self._ensure_directory()
+                self.token_file.write_text(json.dumps(data, indent=2))
+                try:
+                    self.token_file.chmod(0o600)
+                except Exception:
+                    pass
+                logger.info(f"Migrated ChatGPT tokens to {self.token_file}")
+                return data
+        except Exception as e:
+            logger.debug(f"ChatGPT token migration skipped: {e}")
+        return None
 
     def save_tokens(self, auth_data: Dict[str, Any]) -> bool:
         """Save authentication data to disk
@@ -43,7 +63,10 @@ class ChatGPTTokenStorage:
 
             # Write with restrictive permissions
             self.token_file.write_text(json.dumps(auth_data, indent=2))
-            self.token_file.chmod(0o600)
+            try:
+                self.token_file.chmod(0o600)
+            except Exception:
+                pass
 
             logger.debug(f"Saved ChatGPT tokens to {self.token_file}")
             return True
@@ -59,6 +82,9 @@ class ChatGPTTokenStorage:
             Dictionary containing tokens and metadata, or None if not found
         """
         if not self.token_file.exists():
+            migrated = self._maybe_migrate_from_old()
+            if migrated is not None:
+                return migrated
             logger.debug("No ChatGPT token file found")
             return None
 

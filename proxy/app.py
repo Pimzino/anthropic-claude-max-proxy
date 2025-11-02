@@ -16,7 +16,7 @@ from .endpoints import (
 logger = logging.getLogger(__name__)
 
 # Create FastAPI app
-app = FastAPI(title="Anthropic Claude Max Proxy", version="1.0.0")
+app = FastAPI(title="LLMux", version="1.0.0")
 
 # Add middleware
 app.middleware("http")(log_requests_middleware)
