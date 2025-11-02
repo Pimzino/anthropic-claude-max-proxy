@@ -85,7 +85,8 @@ def _load_chatgpt_models() -> None:
     # Source: https://platform.openai.com/docs/models/gpt-5
     base_models = [
         {
-            "id": "openai-gpt-5",
+            "id": "gpt5",
+            "openai_id": "gpt-5",  # Actual OpenAI model ID (hidden)
             "owned_by": "openai-chatgpt",
             "context_length": 400000,  # 400k context window (official spec)
             "max_completion_tokens": 128000,  # 128k max output tokens (official spec)
@@ -94,7 +95,8 @@ def _load_chatgpt_models() -> None:
             "default_instructions": CHATGPT_BASE_INSTRUCTIONS,
         },
         {
-            "id": "openai-gpt-5-codex",
+            "id": "gpt5codex",
+            "openai_id": "gpt-5-codex",  # Actual OpenAI model ID (hidden)
             "owned_by": "openai-chatgpt",
             # Note: gpt-5-codex uses same base as gpt-5 with coding optimizations
             "context_length": 400000,  # Same as gpt-5
@@ -104,7 +106,8 @@ def _load_chatgpt_models() -> None:
             "default_instructions": CHATGPT_GPT5_CODEX_INSTRUCTIONS,
         },
         {
-            "id": "openai-codex-mini-latest",
+            "id": "codexmini",
+            "openai_id": "codex-mini-latest",  # Actual OpenAI model ID (hidden)
             "owned_by": "openai-chatgpt",
             # Note: codex-mini is a smaller, faster variant
             # Exact specs not publicly documented, using conservative estimates
@@ -134,14 +137,14 @@ def _load_chatgpt_models() -> None:
     # Register base models
     for model_config in base_models:
         model_id = model_config["id"]
+        openai_model_id = model_config.get("openai_id", model_id)
 
-        # Store config for later use (with and without openai- prefix)
+        # Store config for later use (using our custom ID)
         CHATGPT_MODELS_CONFIG[model_id.lower()] = model_config
-        # Also store without prefix for lookup
-        unprefixed_id = model_id[7:] if model_id.startswith("openai-") else model_id
-        CHATGPT_MODELS_CONFIG[unprefixed_id.lower()] = model_config
+        # Also store using the actual OpenAI ID for lookup
+        CHATGPT_MODELS_CONFIG[openai_model_id.lower()] = model_config
 
-        # Create registry entry (advertised with openai- prefix)
+        # Create registry entry (advertised with our custom ID)
         entry = ModelRegistryEntry(
             openai_id=model_id,
             anthropic_id="",  # Not an Anthropic model
@@ -159,45 +162,52 @@ def _load_chatgpt_models() -> None:
         _register_model(entry)
         logger.debug(f"Registered ChatGPT model: {model_id}")
 
-        # Add unprefixed alias (not listed) - this is the actual OpenAI model ID
-        alias_entry = ModelRegistryEntry(
-            openai_id=unprefixed_id,
-            anthropic_id="",
-            created=0,
-            owned_by=model_config["owned_by"],
-            context_length=model_config["context_length"],
-            max_completion_tokens=model_config["max_completion_tokens"],
-            reasoning_level=None,
-            reasoning_budget=None,
-            supports_vision=model_config.get("supports_vision", False),
-            use_1m_context=False,
-            include_in_listing=False,  # Hidden alias
-        )
-        _register_model(alias_entry)
-        logger.debug(f"Registered ChatGPT alias: {unprefixed_id}")
+        # Add OpenAI native ID as hidden alias (not listed)
+        if openai_model_id != model_id:
+            alias_entry = ModelRegistryEntry(
+                openai_id=openai_model_id,
+                anthropic_id="",
+                created=0,
+                owned_by=model_config["owned_by"],
+                context_length=model_config["context_length"],
+                max_completion_tokens=model_config["max_completion_tokens"],
+                reasoning_level=None,
+                reasoning_budget=None,
+                supports_vision=model_config.get("supports_vision", False),
+                use_1m_context=False,
+                include_in_listing=False,  # Hidden alias
+            )
+            _register_model(alias_entry)
+            logger.debug(f"Registered ChatGPT alias: {openai_model_id}")
 
     # Register reasoning effort variants if enabled
     if settings.CHATGPT_EXPOSE_REASONING_VARIANTS:
         reasoning_efforts = ["minimal", "low", "medium", "high"]
-        reasoning_models = ["openai-gpt-5", "openai-gpt-5-codex"]
+        reasoning_models = ["gpt5", "gpt5codex"]
 
         for base_model in reasoning_models:
-            # Look up config using the openai- prefixed ID
+            # Look up config using our custom ID
             base_config = CHATGPT_MODELS_CONFIG.get(base_model.lower())
             if not base_config or not base_config.get("supports_reasoning"):
                 continue
 
+            # Get the actual OpenAI model ID for this base model
+            openai_base_id = base_config.get("openai_id", base_model)
+
             for effort in reasoning_efforts:
-                variant_id = f"{base_model}-{effort}"
+                # Our custom variant ID (e.g., gpt5-reasoning-low)
+                variant_id = f"{base_model}-reasoning-{effort}"
+                # OpenAI native variant ID (e.g., gpt-5-low) - hidden alias
+                openai_variant_id = f"{openai_base_id}-{effort}"
+
                 variant_config = base_config.copy()
                 variant_config["id"] = variant_id
                 variant_config["reasoning_effort"] = effort
 
-                # Store with openai- prefix
+                # Store with our custom ID
                 CHATGPT_MODELS_CONFIG[variant_id.lower()] = variant_config
-                # Also store unprefixed version for lookup
-                unprefixed_variant_id = variant_id[7:] if variant_id.startswith("openai-") else variant_id
-                CHATGPT_MODELS_CONFIG[unprefixed_variant_id.lower()] = variant_config
+                # Also store using OpenAI native ID for lookup
+                CHATGPT_MODELS_CONFIG[openai_variant_id.lower()] = variant_config
 
                 entry = ModelRegistryEntry(
                     openai_id=variant_id,
@@ -216,9 +226,9 @@ def _load_chatgpt_models() -> None:
                 _register_model(entry)
                 logger.debug(f"Registered ChatGPT reasoning variant: {variant_id}")
 
-                # Add unprefixed alias for reasoning variant (hidden)
+                # Add OpenAI native ID as hidden alias for reasoning variant
                 alias_variant_entry = ModelRegistryEntry(
-                    openai_id=unprefixed_variant_id,
+                    openai_id=openai_variant_id,
                     anthropic_id="",
                     created=0,
                     owned_by=base_config["owned_by"],
@@ -231,7 +241,7 @@ def _load_chatgpt_models() -> None:
                     include_in_listing=False,  # Hidden alias
                 )
                 _register_model(alias_variant_entry)
-                logger.debug(f"Registered ChatGPT reasoning alias: {unprefixed_variant_id}")
+                logger.debug(f"Registered ChatGPT reasoning alias: {openai_variant_id}")
 
 
 def _load_custom_models() -> None:
@@ -279,8 +289,8 @@ def is_custom_model(model_id: str) -> bool:
 def is_chatgpt_model(model_id: str) -> bool:
     """Check if a model ID is a ChatGPT model
 
-    Supports both advertised IDs (openai-gpt-5, openai-gpt-5-medium) and
-    unprefixed aliases (gpt-5, gpt-5-medium)
+    Supports both advertised IDs (gpt5, gpt5-reasoning-low) and
+    OpenAI native IDs (gpt-5, gpt-5-low)
 
     Args:
         model_id: The model identifier
@@ -288,19 +298,42 @@ def is_chatgpt_model(model_id: str) -> bool:
     Returns:
         True if the model is a ChatGPT model, False otherwise
     """
+    return model_id.lower() in CHATGPT_MODELS_CONFIG
+
+
+def get_openai_model_id(model_id: str) -> str:
+    """Get the actual OpenAI model ID from our custom model ID
+
+    Maps our custom IDs (gpt5, gpt5-reasoning-low) to OpenAI native IDs (gpt-5, gpt-5-low)
+
+    Args:
+        model_id: Our custom model identifier
+
+    Returns:
+        The OpenAI native model ID to use in API calls
+    """
     model_lower = model_id.lower()
 
-    # Strip openai- prefix if present
-    if model_lower.startswith("openai-"):
-        model_lower = model_lower[7:]  # Remove "openai-"
+    # Look up the config
+    config = CHATGPT_MODELS_CONFIG.get(model_lower)
+    if not config:
+        # Not a ChatGPT model, return as-is
+        return model_id
 
-    # Strip reasoning effort suffix if present
-    for effort in ["minimal", "low", "medium", "high"]:
-        if model_lower.endswith(f"-{effort}"):
-            model_lower = model_lower[:-len(f"-{effort}")]
-            break
+    # Get the base OpenAI ID
+    openai_base_id = config.get("openai_id")
+    if not openai_base_id:
+        # No mapping, return as-is
+        return model_id
 
-    return model_lower in CHATGPT_MODELS_CONFIG
+    # Check if this is a reasoning variant
+    reasoning_effort = config.get("reasoning_effort")
+    if reasoning_effort:
+        # Return OpenAI format: gpt-5-low, gpt-5-codex-medium, etc.
+        return f"{openai_base_id}-{reasoning_effort}"
+
+    # Return the base OpenAI ID
+    return openai_base_id
 
 
 def get_custom_model_config(model_id: str) -> Optional[Dict[str, Any]]:
@@ -331,24 +364,13 @@ def get_chatgpt_default_instructions(model_id: str) -> Optional[str]:
     """Get the default system instructions for a ChatGPT model
 
     Args:
-        model_id: The model identifier (e.g., "gpt-5", "gpt-5-codex", "openai-gpt-5-medium")
+        model_id: The model identifier (e.g., "gpt5", "gpt5codex", "gpt5-reasoning-low", "gpt-5")
 
     Returns:
         The default instructions string, or None if not a ChatGPT model
     """
-    # Strip openai- prefix if present
-    model_lower = model_id.lower()
-    if model_lower.startswith("openai-"):
-        model_lower = model_lower[7:]
-
-    # Strip reasoning effort suffix if present
-    for effort in ["minimal", "low", "medium", "high"]:
-        if model_lower.endswith(f"-{effort}"):
-            model_lower = model_lower[:-len(f"-{effort}")]
-            break
-
-    # Get the base model config
-    config = CHATGPT_MODELS_CONFIG.get(model_lower)
+    # Look up the config directly
+    config = CHATGPT_MODELS_CONFIG.get(model_id.lower())
     if config:
         return config.get("default_instructions")
 

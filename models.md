@@ -38,9 +38,9 @@ Each base model has three reasoning variants with different thinking budgets:
 
 | Model ID | Context Length | Max Completion Tokens | Vision Support | Reasoning Support |
 |----------|----------------|----------------------|----------------|-------------------|
-| `openai-gpt-5` | 400,000 | 128,000 | ✓ | ✓ |
-| `openai-gpt-5-codex` | 400,000 | 128,000 | ✓ | ✓ |
-| `openai-codex-mini-latest` | 128,000 | 16,000 | ✗ | ✗ |
+| `gpt5` | 400,000 | 128,000 | ✓ | ✓ |
+| `gpt5codex` | 400,000 | 128,000 | ✓ | ✓ |
+| `codexmini` | 128,000 | 16,000 | ✗ | ✗ |
 
 ### Reasoning Variants (if enabled)
 
@@ -48,14 +48,14 @@ When `CHATGPT_EXPOSE_REASONING_VARIANTS` is enabled, the following variants are 
 
 | Model ID | Reasoning Effort |
 |----------|-----------------|
-| `openai-gpt-5-minimal` | Minimal |
-| `openai-gpt-5-low` | Low |
-| `openai-gpt-5-medium` | Medium |
-| `openai-gpt-5-high` | High |
-| `openai-gpt-5-codex-minimal` | Minimal |
-| `openai-gpt-5-codex-low` | Low |
-| `openai-gpt-5-codex-medium` | Medium |
-| `openai-gpt-5-codex-high` | High |
+| `gpt5-reasoning-minimal` | Minimal |
+| `gpt5-reasoning-low` | Low |
+| `gpt5-reasoning-medium` | Medium |
+| `gpt5-reasoning-high` | High |
+| `gpt5codex-reasoning-minimal` | Minimal |
+| `gpt5codex-reasoning-low` | Low |
+| `gpt5codex-reasoning-medium` | Medium |
+| `gpt5codex-reasoning-high` | High |
 
 ## Custom Models
 

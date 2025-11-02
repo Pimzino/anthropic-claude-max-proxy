@@ -25,7 +25,7 @@ from chatgpt_oauth import (
     convert_tools_chat_to_responses,
 )
 from chatgpt_oauth.session import ensure_session_id
-from models import get_chatgpt_default_instructions
+from models import get_chatgpt_default_instructions, get_openai_model_id
 
 if TYPE_CHECKING:
     from stream_debug import StreamTracer
@@ -88,7 +88,7 @@ class ChatGPTProvider(BaseProvider):
             Responses API format payload
         """
         # Extract OpenAI parameters
-        model = request_data.get("model", "gpt-5")
+        model = request_data.get("model", "gpt5")
         messages = request_data.get("messages", [])
         tools = request_data.get("tools")
         tool_choice = request_data.get("tool_choice", "auto")
@@ -109,18 +109,16 @@ class ChatGPTProvider(BaseProvider):
         reasoning_effort = request_data.get("reasoning_effort")
         reasoning_summary = request_data.get("reasoning_summary")
 
-        # Extract reasoning from model name if present (e.g., gpt-5-high)
-        model_lower = model.lower()
-        # Strip openai- prefix if present
-        if model_lower.startswith("openai-"):
-            model_lower = model_lower[7:]
-            model = model[7:]  # Also strip from actual model name
+        # Get the actual OpenAI model ID to send to the API
+        openai_model = get_openai_model_id(model)
 
+        # Extract reasoning effort from OpenAI model ID if present (e.g., gpt-5-high)
+        model_lower = openai_model.lower()
         for effort in ["minimal", "low", "medium", "high"]:
             if model_lower.endswith(f"-{effort}"):
                 reasoning_effort = reasoning_effort or effort
-                # Remove effort suffix from model name
-                model = model[:-len(f"-{effort}")]
+                # Remove effort suffix from model name for API call
+                openai_model = openai_model[:-len(f"-{effort}")]
                 break
 
         # Build reasoning parameter if needed (matching ChatMock format)
@@ -145,7 +143,7 @@ class ChatGPTProvider(BaseProvider):
         # Build Responses API payload
         # Instructions should be None or a non-empty string (matching ChatMock's logic)
         payload = {
-            "model": model,
+            "model": openai_model,
             "input": input_items,
             "tools": responses_tools,
             "tool_choice": tool_choice if tool_choice in ("auto", "none") else "auto",
