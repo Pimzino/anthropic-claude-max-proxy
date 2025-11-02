@@ -11,6 +11,7 @@ from .custom_models import (
     get_custom_model_config,
     get_chatgpt_model_config,
     get_chatgpt_default_instructions,
+    get_openai_model_id,
 )
 from .resolution import resolve_model_metadata
 
@@ -28,5 +29,6 @@ __all__ = [
     "get_custom_model_config",
     "get_chatgpt_model_config",
     "get_chatgpt_default_instructions",
+    "get_openai_model_id",
     "resolve_model_metadata",
 ]
