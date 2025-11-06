@@ -63,3 +63,4 @@ notes.md
 dev-code
 
 *.log
+.spec-workflow
