@@ -16,6 +16,8 @@ from anthropic import (
     make_anthropic_request,
     stream_anthropic_response,
 )
+from models.resolution import resolve_model_metadata
+from models.reasoning import REASONING_BUDGET_MAP
 from oauth import OAuthManager
 import settings
 from stream_debug import maybe_create_stream_tracer
@@ -50,6 +52,18 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
     # Prepare Anthropic request (pass through client parameters directly)
     anthropic_request = request.model_dump()
 
+    # Model resolution logic to detect reasoning variants and update request model
+    original_model = anthropic_request.get("model")
+    if original_model:
+        resolved_model, reasoning_level, use_1m_context = resolve_model_metadata(original_model)
+        anthropic_request["model"] = resolved_model
+        anthropic_request["_use_1m_context"] = use_1m_context
+        anthropic_request["_reasoning_level"] = reasoning_level
+        
+        if resolved_model != original_model or reasoning_level or use_1m_context:
+            logger.debug(f"[{request_id}] Model resolution: {original_model} -> {resolved_model}, "
+                        f"reasoning={reasoning_level}, 1m_context={use_1m_context}")
+
     # Ensure max_tokens is sufficient if thinking is enabled
     thinking = anthropic_request.get("thinking")
     if thinking and thinking.get("type") == "enabled":
@@ -69,11 +83,43 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
     # Add cache_control to message content blocks for optimal caching
     anthropic_request = add_prompt_caching(anthropic_request)
 
+    # Thinking block injection logic for reasoning models
+    reasoning_level = anthropic_request.get("_reasoning_level")
+    if reasoning_level and reasoning_level in REASONING_BUDGET_MAP:
+        # Check if thinking is already explicitly set in the request
+        existing_thinking = anthropic_request.get("thinking")
+        if not existing_thinking or existing_thinking.get("type") != "enabled":
+            # Inject thinking block with budget based on reasoning level
+            thinking_budget = REASONING_BUDGET_MAP[reasoning_level]
+            anthropic_request["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": thinking_budget
+            }
+            logger.debug(f"[{request_id}] Injected thinking block with budget {thinking_budget} for reasoning level '{reasoning_level}'")
+        else:
+            # Respect explicit thinking parameters but ensure budget is adequate
+            existing_budget = existing_thinking.get("budget_tokens", 0)
+            required_budget = REASONING_BUDGET_MAP[reasoning_level]
+            if existing_budget < required_budget:
+                anthropic_request["thinking"]["budget_tokens"] = required_budget
+                logger.debug(f"[{request_id}] Updated thinking budget from {existing_budget} to {required_budget} for reasoning level '{reasoning_level}'")
+
     # Extract client beta headers
     client_beta_headers = headers_dict.get("anthropic-beta")
 
     # Log the final beta headers that will be sent
-    required_betas = ["claude-code-20250219", "interleaved-thinking-2025-05-14", "fine-grained-tool-streaming-2025-05-14"]
+    required_betas = ["claude-code-20250219", "fine-grained-tool-streaming-2025-05-14"]
+    
+    # Add interleaved-thinking beta if thinking is enabled
+    thinking = anthropic_request.get("thinking")
+    if thinking and thinking.get("type") == "enabled":
+        required_betas.append("interleaved-thinking-2025-05-14")
+    
+    # Add context-1m beta if 1M context is needed
+    if anthropic_request.get("_use_1m_context", False):
+        required_betas.append("context-1m-2025-08-07")
+        logger.debug(f"[{request_id}] Adding context-1m beta header for 1M context model")
+    
     if client_beta_headers:
         client_betas = [beta.strip() for beta in client_beta_headers.split(",")]
         all_betas = list(dict.fromkeys(required_betas + client_betas))
