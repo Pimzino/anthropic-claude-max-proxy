@@ -1,7 +1,7 @@
-"""CLI package for Anthropic Claude Max Proxy
+"""CLI package for LLMux
 
 This package provides a modular command-line interface for managing
-the Anthropic Claude Max Proxy server.
+the LLMux server.
 """
 
 from cli.cli_app import AnthropicProxyCLI

@@ -7,7 +7,8 @@ import signal
 import threading
 from proxy import ProxyServer
 from utils.storage import TokenStorage
-from cli.auth_handlers import check_and_refresh_auth
+from chatgpt_oauth import ChatGPTTokenStorage, ChatGPTOAuthManager
+from cli.auth_handlers import check_and_refresh_auth, check_and_refresh_chatgpt_auth
 
 
 def run_headless(
@@ -33,16 +34,16 @@ def run_headless(
         debug: Whether debug mode is enabled
         auto_start: Whether to automatically start the server
     """
-    console.print("[bold]Anthropic Claude Max Proxy - Headless Mode[/bold]\n")
+    console.print("[bold]LLMux - Headless Mode[/bold]\n")
 
     if debug and hasattr(__main__, '_proxy_debug_logger'):
         __main__._proxy_debug_logger.debug("[CLI] Starting headless mode")
 
-    # Check authentication
+    # Check Anthropic authentication
     auth_ok, auth_status, message = check_and_refresh_auth(storage, oauth, loop, console, debug)
 
     if not auth_ok:
-        console.print(f"[red]Authentication Error:[/red] {message}")
+        console.print(f"[red]Anthropic Authentication Error:[/red] {message}")
         console.print("\n[yellow]To authenticate:[/yellow]")
         console.print("1. Run: python cli.py")
         console.print("2. Select option 2 to login")
@@ -50,13 +51,32 @@ def run_headless(
         console.print("4. Or use: python cli.py --headless --token \"<your-token>\"")
         sys.exit(1)
 
-    # Show auth status
+    # Show Anthropic auth status
     status = storage.get_status()
     token_type = status.get("token_type", "oauth_flow")
     token_type_display = "Long-term" if token_type == "long_term" else "OAuth Flow"
 
-    console.print(f"[green]✓ Authenticated[/green] ({token_type_display})")
-    console.print(f"  Token expires: {status.get('time_until_expiry', 'unknown')}\n")
+    console.print("[bold cyan]Anthropic:[/bold cyan]")
+    console.print(f"  [green]✓ Authenticated[/green] ({token_type_display})")
+    console.print(f"  Token expires: {status.get('time_until_expiry', 'unknown')}")
+
+    # Check ChatGPT authentication (optional)
+    chatgpt_storage = ChatGPTTokenStorage()
+    chatgpt_oauth = ChatGPTOAuthManager()
+    chatgpt_auth_ok, chatgpt_status, chatgpt_message = check_and_refresh_chatgpt_auth(
+        chatgpt_storage, chatgpt_oauth, loop, console, debug
+    )
+
+    if chatgpt_auth_ok:
+        chatgpt_token_status = chatgpt_storage.get_status()
+        console.print("\n[bold cyan]ChatGPT:[/bold cyan]")
+        console.print(f"  [green]✓ Authenticated[/green] (OAuth Flow)")
+        console.print(f"  Token expires: {chatgpt_token_status.get('time_until_expiry', 'unknown')}")
+    else:
+        console.print("\n[bold cyan]ChatGPT:[/bold cyan]")
+        console.print(f"  [dim]Not authenticated[/dim]")
+
+    console.print()
 
     if auto_start:
         # Start the server

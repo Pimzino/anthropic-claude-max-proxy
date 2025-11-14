@@ -1,5 +1,5 @@
 """
-Anthropic Claude Max Proxy - Modular proxy server package.
+LLMux - Modular proxy server package.
 
 This package provides a proxy server for the Anthropic API with OpenAI compatibility,
 custom provider support, and advanced features like prompt caching and thinking modes.

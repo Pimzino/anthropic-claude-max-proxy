@@ -1,4 +1,4 @@
-"""Configuration loader for Anthropic Claude Max Proxy
+"""Configuration loader for LLMux
 
 Loads configuration from multiple sources with the following priority:
 1. Environment variables (highest priority)
