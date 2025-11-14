@@ -40,6 +40,8 @@ Each base model has three reasoning variants with different thinking budgets:
 |----------|----------------|----------------------|----------------|-------------------|
 | `gpt5` | 400,000 | 128,000 | ✓ | ✓ |
 | `gpt5codex` | 400,000 | 128,000 | ✓ | ✓ |
+| `gpt51` | 400,000 | 128,000 | ✓ | ✓ |
+| `gpt51codex` | 400,000 | 128,000 | ✓ | ✓ |
 | `codexmini` | 128,000 | 16,000 | ✗ | ✗ |
 
 ### Reasoning Variants (if enabled)
@@ -56,6 +58,14 @@ When `CHATGPT_EXPOSE_REASONING_VARIANTS` is enabled, the following variants are 
 | `gpt5codex-reasoning-low` | Low |
 | `gpt5codex-reasoning-medium` | Medium |
 | `gpt5codex-reasoning-high` | High |
+| `gpt51-reasoning-minimal` | Minimal |
+| `gpt51-reasoning-low` | Low |
+| `gpt51-reasoning-medium` | Medium |
+| `gpt51-reasoning-high` | High |
+| `gpt51codex-reasoning-minimal` | Minimal |
+| `gpt51codex-reasoning-low` | Low |
+| `gpt51codex-reasoning-medium` | Medium |
+| `gpt51codex-reasoning-high` | High |
 
 ## Custom Models
 
@@ -79,21 +89,25 @@ The following OpenAI native IDs are also accepted (but not listed in `/v1/models
 
 - `gpt-5`
 - `gpt-5-codex`
+- `gpt-5.1`
+- `gpt-5.1-codex`
 - `codex-mini-latest`
 
 Each OpenAI native ID also supports reasoning variants (when enabled):
 - `gpt-5-minimal`, `gpt-5-low`, `gpt-5-medium`, `gpt-5-high`
 - `gpt-5-codex-minimal`, `gpt-5-codex-low`, `gpt-5-codex-medium`, `gpt-5-codex-high`
+- `gpt-5.1-minimal`, `gpt-5.1-low`, `gpt-5.1-medium`, `gpt-5.1-high`
+- `gpt-5.1-codex-minimal`, `gpt-5.1-codex-low`, `gpt-5.1-codex-medium`, `gpt-5.1-codex-high`
 
 ## Total Model Count
 
 - **Claude Base Models**: 4
 - **Claude Reasoning Variants**: 12 (3 per base model)
-- **ChatGPT Base Models**: 3
-- **ChatGPT Reasoning Variants**: 8 (when enabled)
+- **ChatGPT Base Models**: 5
+- **ChatGPT Reasoning Variants**: 16 (when enabled)
 - **Custom Models**: Varies based on configuration
 
-**Total Listed Models**: 19-27 (depending on configuration)
+**Total Listed Models**: 21-37 (depending on configuration)
 
 ## Notes
 

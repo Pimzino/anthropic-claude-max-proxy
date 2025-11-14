@@ -106,6 +106,27 @@ def _load_chatgpt_models() -> None:
             "default_instructions": CHATGPT_GPT5_CODEX_INSTRUCTIONS,
         },
         {
+            "id": "gpt51",
+            "openai_id": "gpt-5.1",  # Actual OpenAI model ID (hidden)
+            "owned_by": "openai-chatgpt",
+            "context_length": 400000,  # 400k context window (official spec)
+            "max_completion_tokens": 128000,  # 128k max output tokens (official spec)
+            "supports_reasoning": True,  # Supports reasoning with effort levels
+            "supports_vision": True,  # Supports text and image input
+            "default_instructions": CHATGPT_BASE_INSTRUCTIONS,
+        },
+        {
+            "id": "gpt51codex",
+            "openai_id": "gpt-5.1-codex",  # Actual OpenAI model ID (hidden)
+            "owned_by": "openai-chatgpt",
+            # Note: gpt-5.1-codex uses same base as gpt-5.1 with coding optimizations
+            "context_length": 400000,  # Same as gpt-5.1
+            "max_completion_tokens": 128000,  # Same as gpt-5.1
+            "supports_reasoning": True,  # Supports reasoning for coding tasks
+            "supports_vision": True,  # Supports text and image input
+            "default_instructions": CHATGPT_GPT5_CODEX_INSTRUCTIONS,
+        },
+        {
             "id": "codexmini",
             "openai_id": "codex-mini-latest",  # Actual OpenAI model ID (hidden)
             "owned_by": "openai-chatgpt",
@@ -183,7 +204,7 @@ def _load_chatgpt_models() -> None:
     # Register reasoning effort variants if enabled
     if settings.CHATGPT_EXPOSE_REASONING_VARIANTS:
         reasoning_efforts = ["minimal", "low", "medium", "high"]
-        reasoning_models = ["gpt5", "gpt5codex"]
+        reasoning_models = ["gpt5", "gpt5codex", "gpt51", "gpt51codex"]
 
         for base_model in reasoning_models:
             # Look up config using our custom ID

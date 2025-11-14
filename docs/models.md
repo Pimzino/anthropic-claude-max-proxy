@@ -20,10 +20,12 @@ Your ChatGPT Plus or Pro subscription exposes these model identifiers through LL
 
 - `gpt5` (400K context, 128K output, reasoning + vision)
 - `gpt5codex` (coding-tuned variant)
+- `gpt51` (400K context, 128K output, reasoning + vision)
+- `gpt51codex` (coding-tuned variant)
 - `codexmini` (faster, smaller variant)
 - Reasoning suffixes: `-reasoning-minimal`, `-reasoning-low`, `-reasoning-medium`, `-reasoning-high`
 
-Friendly aliases like `gpt-5`, `gpt-5-codex`, and `codex-mini-latest` continue to work for clients configured with those names.
+Friendly aliases like `gpt-5`, `gpt-5-codex`, `gpt-5.1`, `gpt-5.1-codex`, and `codex-mini-latest` continue to work for clients configured with those names.
 
 ## Custom Models
 
