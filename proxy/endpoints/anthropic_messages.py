@@ -54,11 +54,12 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
 
     # Model resolution logic to detect reasoning variants and update request model
     original_model = anthropic_request.get("model")
+    reasoning_level = None
+    use_1m_context = False
+    
     if original_model:
         resolved_model, reasoning_level, use_1m_context = resolve_model_metadata(original_model)
         anthropic_request["model"] = resolved_model
-        anthropic_request["_use_1m_context"] = use_1m_context
-        anthropic_request["_reasoning_level"] = reasoning_level
         
         if resolved_model != original_model or reasoning_level or use_1m_context:
             logger.debug(f"[{request_id}] Model resolution: {original_model} -> {resolved_model}, "
@@ -83,23 +84,22 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
     # Add cache_control to message content blocks for optimal caching
     anthropic_request = add_prompt_caching(anthropic_request)
 
-    # Thinking block injection logic for reasoning models
-    reasoning_level = anthropic_request.get("_reasoning_level")
+    # Enforce thinking budget for reasoning models
     if reasoning_level and reasoning_level in REASONING_BUDGET_MAP:
-        # Check if thinking is already explicitly set in the request
+        # Check if request already has thinking parameter
         existing_thinking = anthropic_request.get("thinking")
+        required_budget = REASONING_BUDGET_MAP[reasoning_level]
+        
         if not existing_thinking or existing_thinking.get("type") != "enabled":
-            # Inject thinking block with budget based on reasoning level
-            thinking_budget = REASONING_BUDGET_MAP[reasoning_level]
+            # Add thinking parameter with appropriate budget
             anthropic_request["thinking"] = {
                 "type": "enabled",
-                "budget_tokens": thinking_budget
+                "budget_tokens": required_budget
             }
-            logger.debug(f"[{request_id}] Injected thinking block with budget {thinking_budget} for reasoning level '{reasoning_level}'")
+            logger.debug(f"[{request_id}] Added thinking parameter with budget {required_budget} for reasoning level '{reasoning_level}'")
         else:
-            # Respect explicit thinking parameters but ensure budget is adequate
+            # Ensure existing thinking budget meets minimum requirement
             existing_budget = existing_thinking.get("budget_tokens", 0)
-            required_budget = REASONING_BUDGET_MAP[reasoning_level]
             if existing_budget < required_budget:
                 anthropic_request["thinking"]["budget_tokens"] = required_budget
                 logger.debug(f"[{request_id}] Updated thinking budget from {existing_budget} to {required_budget} for reasoning level '{reasoning_level}'")
@@ -107,22 +107,23 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
     # Extract client beta headers
     client_beta_headers = headers_dict.get("anthropic-beta")
 
-    # Log the final beta headers that will be sent
+    # Start with required base betas
     required_betas = ["claude-code-20250219", "fine-grained-tool-streaming-2025-05-14"]
     
-    # Add interleaved-thinking beta if thinking is enabled
-    thinking = anthropic_request.get("thinking")
-    if thinking and thinking.get("type") == "enabled":
+    # Add interleaved-thinking beta for reasoning models
+    if reasoning_level:
         required_betas.append("interleaved-thinking-2025-05-14")
     
-    # Add context-1m beta if 1M context is needed
-    if anthropic_request.get("_use_1m_context", False):
+    # Add context-1m beta when use_1m_context is True
+    if use_1m_context:
         required_betas.append("context-1m-2025-08-07")
         logger.debug(f"[{request_id}] Adding context-1m beta header for 1M context model")
     
+    # Always include client-provided beta headers
     if client_beta_headers:
         client_betas = [beta.strip() for beta in client_beta_headers.split(",")]
-        all_betas = list(dict.fromkeys(required_betas + client_betas))
+        # Combine required betas with client betas, preserving order and removing duplicates
+        all_betas = required_betas + [beta for beta in client_betas if beta not in required_betas]
     else:
         all_betas = required_betas
 
@@ -158,7 +159,7 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
                         request_id,
                         anthropic_request,
                         access_token,
-                        client_beta_headers,
+                        all_betas,
                         tracer=tracer,
                     ):
                         yield chunk
@@ -174,7 +175,7 @@ async def anthropic_messages(request: AnthropicMessageRequest, raw_request: Requ
         else:
             # Handle non-streaming response
             logger.debug(f"[{request_id}] Making non-streaming request")
-            response = await make_anthropic_request(anthropic_request, access_token, client_beta_headers)
+            response = await make_anthropic_request(anthropic_request, access_token, all_betas)
 
             elapsed_ms = int((time.time() - start_time) * 1000)
             logger.info(f"[{request_id}] Anthropic request completed in {elapsed_ms}ms status={response.status_code}")
